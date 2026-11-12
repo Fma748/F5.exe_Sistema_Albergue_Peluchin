@@ -10,7 +10,7 @@ Integrantes y roles
 | MEDINACELI ANDRADE FERNANDO YERAY | Lider de Grupo - Developer |
 | QUISPE MAMANI ELVIS | Lider de documento - Developer |
 | MAGUEÑO CANO BENJAMIN MATEO | Developer |
-| NINA GARCIA HUGO MARCELO | Publicista |
+| NINA GARCIA HUGO MARCELO | Publicista - Developer |
 | APAZA NISTAZA DAVID ABRAHAM | Developer |
 
 
