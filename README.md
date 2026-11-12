@@ -7,11 +7,11 @@ Integrantes y roles
 
 | Integrante | Rol |
 |---|---|
-| MEDINACELI ANDRADE FERNANDO YERAY | Por asignar |
-| QUISPE MAMANI ELVIS | Por asignar |
-| MAGUEÑO CANO BENJAMIN MATEO | Por asignar |
-| NINA GARCIA HUGO MARCELO | Por asignar |
-| APAZA NISTAZA DAVID ABRAHAM | Por asignar |
+| MEDINACELI ANDRADE FERNANDO YERAY | Lider de Grupo - Developer |
+| QUISPE MAMANI ELVIS | Lider de documento - Developer |
+| MAGUEÑO CANO BENJAMIN MATEO | Developer |
+| NINA GARCIA HUGO MARCELO | Publicista |
+| APAZA NISTAZA DAVID ABRAHAM | Developer |
 
 Estructura del proyecto
 - docs/: Documentación.
