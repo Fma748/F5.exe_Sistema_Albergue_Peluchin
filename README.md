@@ -5,7 +5,7 @@ Proyecto desarrollado para una mejor organización del sistema Albergue Peluchí
 
 Integrantes y roles
 
-| Integrante | Rol |
+| Integrantes | Rol |
 |---|---|
 | MEDINACELI ANDRADE FERNANDO YERAY | Lider de Grupo - Developer |
 | QUISPE MAMANI ELVIS | Lider de documento - Developer |
