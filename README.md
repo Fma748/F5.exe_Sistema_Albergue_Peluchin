@@ -13,12 +13,10 @@ Integrantes y roles
 | NINA GARCIA HUGO MARCELO | Publicista |
 | APAZA NISTAZA DAVID ABRAHAM | Developer |
 
-Estructura del proyecto
-- docs/: Documentación.
-- src/: Código fuente.
-- tests/: Pruebas del sistema.
 
 Tecnologías
 - Git
 - GitHub
+- Visual Studio Code
+
  
