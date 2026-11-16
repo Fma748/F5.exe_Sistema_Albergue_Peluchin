@@ -1,4 +1,5 @@
 import os
+import re
 from getpass import getpass
 import mysql.connector
 from mysql.connector import Error
@@ -26,8 +27,10 @@ EXTRAS = [
 
 def leer_sentencias(ruta):
     with open(ruta, encoding="utf-8") as f:
-        lineas = [l for l in f if not l.strip().startswith("--")]
-    return [s.strip() for s in "".join(lineas).split(";") if s.strip()]
+        texto = f.read()
+    # quita todos los comentarios "-- ..." (incluso los que traen un ';')
+    texto = re.sub(r"--[^\n]*", "", texto)
+    return [s.strip() for s in texto.split(";") if s.strip()]
 
 
 def main():
@@ -41,11 +44,25 @@ def main():
         return
     cur = cn.cursor()
     try:
+        cur.execute("SHOW DATABASES LIKE 'Albergue_Peluchin'")
+        if cur.fetchone():
+            r = input("La base Albergue_Peluchin ya existe. ¿Borrarla y crearla de nuevo? "
+                      "Se pierden sus datos (s/n): ").strip().lower()
+            if r != "s":
+                print("Cancelado. No se hizo ningún cambio.")
+                return
+            cur.execute("DROP DATABASE Albergue_Peluchin")
+            cn.commit()
+            print("Base anterior borrada.")
+
         sentencias = leer_sentencias(RUTA_SQL)
-        for i, sql in enumerate(sentencias, 1):
+        for sql in sentencias:
             cur.execute(sql)
         cn.commit()
         print(f"Base creada correctamente ({len(sentencias)} sentencias ejecutadas).")
+
+        cur.execute("SHOW TABLES")
+        print("Tablas creadas:", len(cur.fetchall()), "(deben ser 14)")
 
         if input("¿Aplicar las mejoras opcionales (regla y trigger)? (s/n): ").strip().lower() == "s":
             for nombre, sql in EXTRAS:
@@ -59,7 +76,6 @@ def main():
         print("No encuentro el archivo SQL. Debe estar en la misma carpeta que crear_base.py.")
     except Error as e:
         print("Error al ejecutar el SQL:", e)
-        print("Si la base ya existía con tablas, bórrala y vuelve a intentar.")
     finally:
         cur.close()
         cn.close()
