@@ -18,5 +18,4 @@ TRABAJO COLABORATIVO
 **19/11/2026**
 TRABAJO COLABORATIVO 
 - Creación de de la carpeta "Base de Datos"
-- Implementación los archivos "SQL" a la carpeta "Base de Datos"
-- 
+- Implementación los archivos "SQL" a la carpeta "Base de Datos
