@@ -5,21 +5,26 @@ import mysql.connector
 from mysql.connector import Error
 
 RUTA_SQL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "albergue_peluchin_inicial_corregida.sql")
+                        "Base_de_Datos", "albergue_peluchin_inicial_corregida.sql")
 
 EXTRAS = [
     ("Regla: vencimiento >= ingreso en Lote",
      "ALTER TABLE Lote ADD CONSTRAINT chk_lote_vencimiento "
      "CHECK (fecha_vencimiento IS NULL OR fecha_vencimiento >= fecha_ingreso)"),
-    ("Trigger: Entrega solo con movimiento SALIDA",
-     """CREATE TRIGGER trg_entrega_solo_salida
-        BEFORE INSERT ON Entrega
+    ("Trigger: destinatario obligatorio en SALIDA y prohibido en ENTRADA",
+     """CREATE TRIGGER trg_detalle_destinatario
+        BEFORE INSERT ON Detalle_Movimiento
         FOR EACH ROW
         BEGIN
-          IF (SELECT tipo_movimiento FROM Movimiento
-              WHERE id_movimiento = NEW.id_movimiento) <> 'SALIDA' THEN
+          DECLARE v_tipo VARCHAR(10);
+          SELECT tipo_movimiento INTO v_tipo FROM Movimiento
+           WHERE id_movimiento = NEW.id_movimiento;
+          IF v_tipo = 'SALIDA' AND (NEW.destinatario IS NULL OR TRIM(NEW.destinatario) = '') THEN
             SIGNAL SQLSTATE '45000'
-              SET MESSAGE_TEXT = 'La entrega debe respaldarse con un movimiento de tipo SALIDA';
+              SET MESSAGE_TEXT = 'En una SALIDA debes indicar el destinatario';
+          ELSEIF v_tipo = 'ENTRADA' AND NEW.destinatario IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000'
+              SET MESSAGE_TEXT = 'Una ENTRADA no lleva destinatario';
           END IF;
         END"""),
 ]
@@ -61,8 +66,8 @@ def main():
         cn.commit()
         print(f"Base creada correctamente ({len(sentencias)} sentencias ejecutadas).")
 
-        cur.execute("SHOW TABLES")
-        print("Tablas creadas:", len(cur.fetchall()), "(deben ser 14)")
+        cur.execute("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")
+        print("Tablas creadas:", len(cur.fetchall()), "(deben ser 17)")
 
         if input("¿Aplicar las mejoras opcionales (regla y trigger)? (s/n): ").strip().lower() == "s":
             for nombre, sql in EXTRAS:
@@ -72,8 +77,9 @@ def main():
                     print("OK:", nombre)
                 except Error as e:
                     print("No se aplicó:", nombre, "->", e)
+        print("\nSiguiente paso: ejecuta  py crear_admin.py  y luego  py app.py")
     except FileNotFoundError:
-        print("No encuentro el archivo SQL. Debe estar en la misma carpeta que crear_base.py.")
+        print("No encuentro el archivo SQL. Debe estar en la carpeta Base_de_Datos.")
     except Error as e:
         print("Error al ejecutar el SQL:", e)
     finally:

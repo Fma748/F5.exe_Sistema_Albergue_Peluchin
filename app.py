@@ -1,75 +1,208 @@
+import os
+import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+
 from conexion import conectar
 from seguridad import autenticar, generar_hash
 
-FONDO = "#F2F4F7"
+CARPETA = os.path.dirname(os.path.abspath(__file__))
+FUENTE = "Segoe UI"
+FUENTE_EMOJI = "Segoe UI Emoji"
+
+# ----------------------------------------------------------------------
+# Colores (combinan con el logo: fondo negro, líneas blancas)
+# ----------------------------------------------------------------------
+NEGRO = "#000000"
+FONDO = "#FFF8EE"
 BLANCO = "#FFFFFF"
-AZUL = "#34495E"
-AZUL_CLARO = "#E8EEF4"
-VERDE = "#43845C"
-VERDE_CLARO = "#E7F1E9"
-TERRACOTA = "#A65C32"
-TEXTO = "#303943"
-GRIS = "#78838D"
-BORDE = "#D9E0E6"
+NARANJA = "#F2994A"
+VERDE = "#23874B"
+AZUL = "#2563C9"
+CELESTE = "#3B9BD9"
+ROSA = "#E0608A"
+ROJO = "#C93B3B"
+GRIS = "#6B7280"
+TEXTO = "#222222"
+BORDE = "#E5D9C8"
+AYUDA_BG = "#FFF1CC"
 
-# Módulos de mantenimiento (tabla, campos, etiquetas)
-CONFIG = {
-    "Categorías": ("Categoria", ["nombre", "descripcion"], ["Nombre", "Descripción"]),
-    "Unidades de medida": ("Unidad_Medida", ["nombre", "abreviatura"], ["Nombre", "Abreviatura"]),
-    "Productos": ("Producto", ["nombre", "descripcion", "stock_minimo", "id_categoria", "id_unidad"],
-                  ["Nombre", "Descripción", "Stock mínimo", "Categoría", "Unidad"]),
-    "Instituciones": ("Institucion", ["nombre", "tipo", "telefono"], ["Nombre", "Tipo", "Teléfono"]),
-    "Donantes": ("Donante", ["nombre", "tipo_donante", "telefono", "id_institucion"],
-                 ["Nombre", "Tipo de donante", "Teléfono", "Institución (solo si es INSTITUCION)"]),
-    "Donaciones": ("Donacion", ["codigo", "id_donante", "fecha_recepcion", "destino"],
-                   ["Código", "Donante", "Fecha recepción YYYY-MM-DD", "Destino"]),
-    "Programas": ("Programa", ["nombre", "objetivos", "fecha_inicio", "fecha_fin"],
-                  ["Nombre", "Objetivos", "Fecha inicio YYYY-MM-DD (opcional)", "Fecha fin YYYY-MM-DD (opcional)"]),
-    "Mascotas beneficiarias": ("Beneficiario", ["nombre", "especie", "raza", "sexo", "edad_aprox", "fecha_ingreso"],
-                               ["Nombre", "Especie", "Raza", "Sexo", "Edad aproximada", "Fecha ingreso YYYY-MM-DD"]),
-    "Inscribir mascota en programa": ("Programa_Beneficiario", ["id_programa", "id_beneficiario", "fecha_registro"],
-                                      ["Programa", "Mascota", "Fecha YYYY-MM-DD"]),
-    "Usuarios": ("Usuario", ["nombre_usuario", "contrasena_hash", "nombre_completo", "rol", "activo"],
-                 ["Usuario", "Contraseña (mín. 8, se guarda cifrada)", "Nombre completo", "Rol", "Activo (1 = sí, 0 = no)"]),
-}
-
-# Clave primaria de cada tabla (Programa_Beneficiario tiene clave compuesta)
-PK = {
-    "Categoria": ["id_categoria"], "Unidad_Medida": ["id_unidad"], "Producto": ["id_producto"],
-    "Institucion": ["id_institucion"], "Donante": ["id_donante"], "Donacion": ["id_donacion"],
-    "Programa": ["id_programa"], "Beneficiario": ["id_beneficiario"],
-    "Programa_Beneficiario": ["id_programa", "id_beneficiario"], "Usuario": ["id_usuario"],
-}
-
-# Campos que se eligen de una lista desplegable
-FK_SQL = {
-    "id_categoria": "SELECT id_categoria, nombre FROM Categoria ORDER BY nombre",
-    "id_unidad": "SELECT id_unidad, CONCAT(nombre,' (',abreviatura,')') FROM Unidad_Medida ORDER BY nombre",
-    "id_institucion": "SELECT id_institucion, nombre FROM Institucion ORDER BY nombre",
-    "id_donante": "SELECT id_donante, nombre FROM Donante ORDER BY nombre",
-    "id_programa": "SELECT id_programa, nombre FROM Programa ORDER BY nombre",
-    "id_beneficiario": "SELECT id_beneficiario, CONCAT(nombre,' (',especie,')') FROM Beneficiario ORDER BY nombre",
+# ----------------------------------------------------------------------
+# Datos de los formularios (qué se registra en cada pantalla)
+# ----------------------------------------------------------------------
+# FK_INFO: campo -> (tabla, clave primaria, texto que se muestra)
+FK_INFO = {
+    "id_categoria": ("Categoria", "id_categoria", "x.nombre"),
+    "id_unidad": ("Unidad_Medida", "id_unidad", "CONCAT(x.nombre,' (',x.abreviatura,')')"),
+    "id_especie": ("Especie", "id_especie", "x.nombre"),
+    "id_raza": ("Raza", "id_raza", "x.nombre"),
+    "id_institucion": ("Institucion", "id_institucion", "x.nombre"),
+    "id_donante": ("Donante", "id_donante", "x.nombre"),
+    "id_cuidado": ("Cuidados_Especiales", "id_cuidado", "x.nombre"),
+    "id_mascota": ("Mascota", "id_mascota", "CONCAT(x.nombre,' (',x.codigo,')')"),
 }
 ENUMS = {
     "tipo_donante": ["PERSONA", "INSTITUCION"],
     "sexo": ["Macho", "Hembra"],
     "rol": ["ADMIN", "OPERADOR"],
-    "activo": ["1", "0"],
+    "activo": ["Sí", "No"],
 }
-OPCIONALES = {"id_institucion", "fecha_fin", "fecha_inicio", "descripcion", "objetivos",
-              "raza", "edad_aprox", "telefono", "tipo"}
-CAMPOS_FECHA = {"fecha_recepcion", "fecha_inicio", "fecha_fin", "fecha_ingreso", "fecha_registro"}
-FECHA_HOY = {"fecha_recepcion", "fecha_ingreso", "fecha_registro"}
-DEFAULTS = {"rol": "OPERADOR", "activo": "1", "stock_minimo": "0"}
+
+
+def titulo_columna(etiqueta):
+    t = etiqueta.split(" (")[0]
+    if t.startswith("Nombre"):
+        return "Nombre"
+    return {"Especie a la que sirve": "Especie", "Institución": "Institución"}.get(t, t)
+
+
+def F(campo, etiqueta, tipo="texto", req=True, **kw):
+    """Define un campo del formulario.
+    tipo: texto | entero | decimal | decimal+ | fecha | fk | enum | bool | clave"""
+    d = dict(campo=campo, etiqueta=etiqueta, tipo=tipo, req=req)
+    d.update(kw)
+    return d
+
+
+MODULOS = {
+    "Productos": dict(
+        tabla="Producto", pk="id_producto", prefijo="PRD", icono="📦",
+        ayuda="Aquí registras los productos del albergue (alimentos, medicinas, insumos de limpieza...). "
+              "El stock mínimo sirve para que el sistema te avise cuando quede poco. "
+              "Para sumar o restar cantidades usa «Registrar entrada o salida».",
+        campos=[
+            F("nombre", "Nombre del producto"),
+            F("id_categoria", "Categoría", "fk"),
+            F("id_unidad", "Unidad de medida", "fk"),
+            F("id_especie", "Especie a la que sirve", "fk", req=False, nulo="Todas"),
+            F("stock_minimo", "Stock mínimo (aviso)", "decimal", default="0"),
+            F("descripcion", "Descripción", req=False),
+        ],
+        virtuales={"stock_minimo": "(SELECT i.stock_minimo FROM Inventario i WHERE i.id_producto=t.id_producto)"},
+        extras=[("stock_actual", "Stock total",
+                 "(SELECT i.stock_actual FROM Inventario i WHERE i.id_producto=t.id_producto)")],
+    ),
+    "Categorías de productos": dict(
+        tabla="Categoria", pk="id_categoria", prefijo="CAT", icono="🗂",
+        ayuda="Las categorías agrupan los productos (por ejemplo: Alimento, Medicina, Limpieza). "
+              "Se usan al registrar productos y el consumo de las mascotas.",
+        campos=[F("nombre", "Nombre de la categoría"), F("descripcion", "Descripción", req=False)],
+    ),
+    "Unidades de medida": dict(
+        tabla="Unidad_Medida", pk="id_unidad", prefijo="UNI", icono="⚖",
+        ayuda="Es la forma de medir un producto (kilogramo, bolsa, caja, dosis, litro...). "
+              "Escribe el nombre completo y su abreviatura.",
+        campos=[F("nombre", "Nombre (ej. Kilogramo)"), F("abreviatura", "Abreviatura (ej. kg)")],
+    ),
+    "Especies": dict(
+        tabla="Especie", pk="id_especie", prefijo="ESP", icono="🐾",
+        ayuda="Tipos de animal que atiende el albergue (Perro, Gato...). "
+              "Se eligen al registrar mascotas y razas.",
+        campos=[F("nombre", "Nombre de la especie")],
+    ),
+    "Razas": dict(
+        tabla="Raza", pk="id_raza", prefijo="RAZ", icono="🐕",
+        ayuda="Razas de cada especie. Primero elige la especie y luego escribe el nombre de la raza.",
+        campos=[F("id_especie", "Especie", "fk"), F("nombre", "Nombre de la raza")],
+    ),
+    "Mascotas": dict(
+        tabla="Mascota", pk="id_mascota", prefijo="MAS", icono="🐶",
+        ayuda="Registro de los animales del albergue. Al elegir la especie, la lista de razas se filtra sola. "
+              "Cuando una mascota sale del albergue, edítala y escribe su fecha de salida.",
+        campos=[
+            F("nombre", "Nombre de la mascota"),
+            F("id_especie", "Especie", "fk"),
+            F("id_raza", "Raza", "fk", req=False, depende="id_especie"),
+            F("sexo", "Sexo", "enum"),
+            F("fecha_nacimiento", "Nacimiento aprox. (AAAA-MM-DD)", "fecha", req=False),
+            F("fecha_ingreso", "Fecha de ingreso (AAAA-MM-DD)", "fecha", hoy=True),
+            F("fecha_salida", "Fecha de salida (AAAA-MM-DD)", "fecha", req=False),
+        ],
+        extras=[("edad", "Edad (años)", "TIMESTAMPDIFF(YEAR, t.fecha_nacimiento, CURDATE())")],
+    ),
+    "Consumo por mascota": dict(
+        tabla="Beneficiario", pk="cod_beneficiario", col_codigo="cod_beneficiario", prefijo="BEN", icono="🍽",
+        ayuda="Aquí queda anotado qué recibe cada mascota (por ejemplo: 2 kg de alimento). "
+              "Estos registros también se crean solos cuando haces una salida de inventario para una mascota.",
+        campos=[
+            F("id_mascota", "Mascota", "fk"),
+            F("id_categoria", "Categoría", "fk"),
+            F("fecha", "Fecha (AAAA-MM-DD)", "fecha", hoy=True),
+            F("cantidad", "Cantidad", "decimal+"),
+            F("id_unidad", "Unidad de medida", "fk"),
+        ],
+    ),
+    "Cuidados especiales": dict(
+        tabla="Cuidados_Especiales", pk="id_cuidado", prefijo="CUI", icono="❤",
+        ayuda="Programas de atención especial (por ejemplo: Rehabilitación, Adopción, Mascotas en tratamiento). "
+              "Las fechas son opcionales.",
+        campos=[
+            F("nombre", "Nombre del cuidado especial"),
+            F("objetivos", "Objetivos", req=False),
+            F("fecha_inicio", "Inicio (AAAA-MM-DD)", "fecha", req=False),
+            F("fecha_fin", "Fin (AAAA-MM-DD)", "fecha", req=False),
+        ],
+    ),
+    "Inscribir mascota en cuidado especial": dict(
+        tabla="Mascota_Cuidado", pk="id_mascota_cuidado", prefijo="MCU", icono="📝",
+        ayuda="Aquí inscribes una mascota en uno de los cuidados especiales. "
+              "Una mascota no puede inscribirse dos veces en el mismo cuidado.",
+        campos=[
+            F("id_cuidado", "Cuidado especial", "fk"),
+            F("id_mascota", "Mascota", "fk"),
+            F("fecha_registro", "Fecha de inscripción (AAAA-MM-DD)", "fecha", hoy=True),
+        ],
+    ),
+    "Donaciones": dict(
+        tabla="Donacion", pk="id_donacion", prefijo="DON", icono="🎁",
+        ayuda="Registro de las donaciones recibidas: quién donó, cuándo y para qué se destina. "
+              "Primero registra al donante en «Donantes».",
+        campos=[
+            F("id_donante", "Donante", "fk"),
+            F("fecha_recepcion", "Fecha de recepción (AAAA-MM-DD)", "fecha", hoy=True),
+            F("destino", "Destino de la donación"),
+        ],
+    ),
+    "Donantes": dict(
+        tabla="Donante", pk="id_donante", prefijo="DNT", icono="🤝",
+        ayuda="Personas o instituciones que donan al albergue. "
+              "Si el donante es una INSTITUCION, elige cuál; si es una PERSONA, deja ese campo vacío.",
+        campos=[
+            F("nombre", "Nombre del donante"),
+            F("tipo_donante", "Tipo de donante", "enum"),
+            F("telefono", "Teléfono", "entero", req=False),
+            F("id_institucion", "Institución (solo si es INSTITUCION)", "fk", req=False),
+        ],
+    ),
+    "Instituciones": dict(
+        tabla="Institucion", pk="id_institucion", prefijo="INS", icono="🏢",
+        ayuda="Organizaciones que colaboran con el albergue (empresas, fundaciones, colegios...).",
+        campos=[
+            F("nombre", "Nombre de la institución"),
+            F("tipo", "Tipo (empresa, fundación...)", req=False),
+            F("telefono", "Teléfono", "entero", req=False),
+        ],
+    ),
+    "Usuarios": dict(
+        tabla="Usuario", pk="id_usuario", prefijo="USR", icono="👤",
+        ayuda="Personas que pueden usar el sistema. El ADMIN puede hacerlo todo; el OPERADOR no administra usuarios. "
+              "Al editar un usuario, deja la contraseña vacía para conservar la actual.",
+        campos=[
+            F("nombre_usuario", "Nombre de usuario"),
+            F("contrasena_hash", "Contraseña (mín. 8)", "clave"),
+            F("nombre_completo", "Nombre completo"),
+            F("rol", "Rol", "enum", default="OPERADOR"),
+            F("activo", "¿Está activo?", "bool", default="Sí"),
+        ],
+    ),
+}
 
 # Productos con su existencia vigente (sin contar lotes vencidos)
 SQL_PRODUCTOS = """
     SELECT p.id_producto,
-           CONCAT(p.nombre, ' [', u.abreviatura, '] disponible: ',
+           CONCAT(p.nombre, ' [', u.abreviatura, ']  disponible: ',
                   COALESCE(SUM(CASE WHEN l.fecha_vencimiento IS NULL
                                       OR l.fecha_vencimiento >= CURDATE()
                                     THEN l.cantidad_actual END), 0))
@@ -80,23 +213,146 @@ SQL_PRODUCTOS = """
     ORDER BY p.nombre
 """
 
+CONCEPTOS_ENTRADA = ["Compra", "Donación", "Devolución", "Otro"]
+CONCEPTOS_SALIDA = ["Alimentación de mascotas", "Atención veterinaria", "Entrega a institución",
+                    "Baja por vencimiento", "Otro"]
 
+
+# ----------------------------------------------------------------------
+# Utilidades generales
+# ----------------------------------------------------------------------
+def siguiente_codigo(cur, tabla, columna, prefijo):
+    """Código automático: PRD-0001, PRD-0002..."""
+    cur.execute(f"SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(`{columna}`,'-',-1) AS UNSIGNED)),0)+1 "
+                f"FROM `{tabla}`")
+    return f"{prefijo}-{int(cur.fetchone()[0]):04d}"
+
+
+def texto_error(e):
+    n = getattr(e, "errno", None)
+    if n == 1062:
+        return "Ya existe un registro con esos datos (nombre o código repetido)."
+    if n == 1451:
+        return "No se puede eliminar: este registro se usa en otras partes del sistema."
+    if n == 1452:
+        return "Uno de los datos elegidos ya no existe. Actualiza la lista e inténtalo otra vez."
+    if n in (3819, 4025):
+        return "Algún valor no cumple las reglas (cantidades o fechas incorrectas)."
+    if n == 1644:
+        return getattr(e, "msg", str(e))
+    return str(e)
+
+
+def solo_entero(texto):
+    return texto == "" or texto.isdigit()
+
+
+def solo_decimal(texto):
+    return texto == "" or re.fullmatch(r"\d*[.,]?\d*", texto) is not None
+
+
+def mezclar(c1, c2, t):
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#%02x%02x%02x" % tuple(int(x + (y - x) * t) for x, y in zip(a, b))
+
+
+def boton(parent, texto, comando, bg=VERDE, fg=BLANCO, padx=16, pady=8, size=10):
+    b = tk.Button(parent, text=texto, command=comando, bg=bg, fg=fg,
+                  activebackground=mezclar(bg, NEGRO, .18), activeforeground=fg,
+                  relief="flat", bd=0, cursor="hand2", padx=padx, pady=pady,
+                  font=(FUENTE, size, "bold"))
+    b.bind("<Enter>", lambda e: b.configure(bg=mezclar(bg, NEGRO, .12)))
+    b.bind("<Leave>", lambda e: b.configure(bg=bg))
+    return b
+
+
+class Accion(tk.Frame):
+    """Botón grande con icono, título y una línea que explica para qué sirve."""
+
+    def __init__(self, parent, icono, titulo, descripcion, comando, color):
+        super().__init__(parent, bg=BLANCO, cursor="hand2",
+                         highlightbackground=BORDE, highlightthickness=1)
+        self.comando = comando
+        self.tinte = mezclar(color, BLANCO, .82)
+        self.normal = BLANCO
+        tk.Label(self, text=icono, bg=BLANCO, fg=color,
+                 font=(FUENTE_EMOJI, 16), width=2).pack(side="left", padx=(6, 0), pady=8)
+        caja = tk.Frame(self, bg=BLANCO)
+        caja.pack(side="left", fill="x", expand=True, padx=(2, 8), pady=5)
+        tk.Label(caja, text=titulo, bg=BLANCO, fg=NEGRO, anchor="w", justify="left",
+                 wraplength=185, font=(FUENTE, 10, "bold")).pack(fill="x")
+        tk.Label(caja, text=descripcion, bg=BLANCO, fg=GRIS, anchor="w", justify="left",
+                 wraplength=185, font=(FUENTE, 8)).pack(fill="x")
+        for w in self.winfo_children():
+            self._enlazar(w)
+
+    def _enlazar(self, w):
+        w.bind("<Button-1>", lambda e: self.comando())
+        w.bind("<Enter>", lambda e: self._fondo(self.tinte))
+        w.bind("<Leave>", lambda e: self._fondo(self.normal))
+        for h in w.winfo_children():
+            self._enlazar(h)
+
+    def _fondo(self, color):
+        self.configure(bg=color)
+        for w in self._todos(self):
+            try:
+                w.configure(bg=color)
+            except tk.TclError:
+                pass
+
+    def _todos(self, w):
+        for h in w.winfo_children():
+            yield h
+            yield from self._todos(h)
+
+
+# ----------------------------------------------------------------------
+# Aplicación
+# ----------------------------------------------------------------------
 class PeluchinApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Albergue de Mascotas Peluchin | Inventario y Suministros")
-        self.root.geometry("1180x760")
-        self.root.minsize(980, 650)
+        ancho, alto = 1240, 700
+        x = max((root.winfo_screenwidth() - ancho) // 2, 0)
+        y = max((root.winfo_screenheight() - alto) // 2 - 20, 0)
+        self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
+        self.root.minsize(1100, 620)
         self.usuario = None
+        self.logos = {}
+        for nombre in ("grande", "pequeno", "mini"):
+            ruta = os.path.join(CARPETA, "imagenes", f"logo_{nombre}.png")
+            try:
+                self.logos[nombre] = tk.PhotoImage(file=ruta)
+            except tk.TclError:
+                self.logos[nombre] = None
+        self.estilos()
         self.construir_login()
 
     # ------------------------------------------------------------------
-    # Utilidades
-    # ------------------------------------------------------------------
+    def estilos(self):
+        s = ttk.Style(self.root)
+        s.theme_use("clam")
+        s.configure("Treeview", rowheight=28, font=(FUENTE, 10), background=BLANCO,
+                    fieldbackground=BLANCO, foreground=TEXTO, borderwidth=0)
+        s.configure("Treeview.Heading", background=NEGRO, foreground=BLANCO,
+                    font=(FUENTE, 10, "bold"), relief="flat", padding=7)
+        s.map("Treeview.Heading", background=[("active", "#333333")])
+        s.map("Treeview", background=[("selected", NARANJA)], foreground=[("selected", NEGRO)])
+        s.configure("TEntry", padding=6, font=(FUENTE, 10))
+        s.configure("TCombobox", padding=6, font=(FUENTE, 10))
+        s.map("TCombobox", fieldbackground=[("readonly", BLANCO), ("disabled", "#EEEEEE")],
+              foreground=[("readonly", TEXTO)])
+        self.root.option_add("*TCombobox*Listbox.font", (FUENTE, 10))
+        s.configure("Vertical.TScrollbar", background=BORDE, troughcolor=FONDO, borderwidth=0)
+
     def db(self):
         cn = conectar()
         if cn is None:
-            messagebox.showerror("Base de datos", "No se pudo conectar a MySQL.\nRevisa conexion.py y que MySQL esté iniciado.")
+            messagebox.showerror("Base de datos", "No se pudo conectar a MySQL.\n"
+                                                   "Revisa conexion.py y que MySQL esté iniciado.")
         return cn
 
     def limpiar(self):
@@ -104,7 +360,7 @@ class PeluchinApp:
             w.destroy()
 
     def opciones(self, sql, params=(), vacio=False):
-        """Devuelve una lista 'id - texto' para los desplegables."""
+        """Lista 'id - texto' para los desplegables."""
         datos = []
         cn = self.db()
         if cn is not None:
@@ -113,11 +369,20 @@ class PeluchinApp:
                 cur.execute(sql, params)
                 datos = [f"{f[0]} - {f[1]}" for f in cur.fetchall()]
             except Exception as e:
-                messagebox.showerror("Consulta", str(e))
+                messagebox.showerror("Consulta", texto_error(e))
             finally:
                 cur.close()
                 cn.close()
         return ([""] + datos) if vacio else datos
+
+    def opciones_fk(self, campo, padre=None, vacio=False):
+        ref, pkr, txt = FK_INFO[campo]
+        if campo == "id_raza":
+            if padre is None:
+                return [""] if vacio else []
+            return self.opciones(f"SELECT x.{pkr}, {txt} FROM {ref} x WHERE x.id_especie=%s ORDER BY 2",
+                                 (padre,), vacio)
+        return self.opciones(f"SELECT x.{pkr}, {txt} FROM {ref} x ORDER BY 2", (), vacio)
 
     @staticmethod
     def id_de(texto):
@@ -137,50 +402,80 @@ class PeluchinApp:
             raise ValueError(f"{nombre}: usa el formato AAAA-MM-DD (ejemplo 2026-11-16).")
 
     @staticmethod
-    def leer_cantidad(texto):
+    def leer_cantidad(texto, nombre="La cantidad", permitir_cero=False):
         try:
             c = Decimal((texto or "").strip().replace(",", "."))
         except InvalidOperation:
-            raise ValueError("La cantidad no es un número válido.")
-        if not c.is_finite() or c <= 0:
-            raise ValueError("La cantidad debe ser mayor que cero.")
+            raise ValueError(f"{nombre} no es un número válido.")
+        if not c.is_finite() or c < 0 or (c == 0 and not permitir_cero):
+            raise ValueError(f"{nombre} debe ser mayor que cero." if not permitir_cero
+                             else f"{nombre} no puede ser negativa.")
         return c
 
+    def entrada(self, padre, tipo="texto", width=30, show=""):
+        kw = {}
+        if tipo == "entero":
+            kw = dict(validate="key", validatecommand=(self.root.register(solo_entero), "%P"))
+        elif tipo in ("decimal", "decimal+"):
+            kw = dict(validate="key", validatecommand=(self.root.register(solo_decimal), "%P"))
+        return ttk.Entry(padre, width=width, show=show, **kw)
+
     # ------------------------------------------------------------------
-    # Login y menú
+    # Inicio de sesión
     # ------------------------------------------------------------------
     def construir_login(self):
         self.limpiar()
         self.root.configure(bg=FONDO)
-        marco = tk.Frame(self.root, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
-        marco.place(relx=.5, rely=.5, anchor="center", width=430, height=440)
-        tk.Frame(marco, bg=TERRACOTA, height=7).pack(fill="x")
-        tk.Label(marco, text="🐾  🐶  🐱  🐾", bg=BLANCO, fg=TERRACOTA,
-                 font=("Arial", 25)).pack(pady=(28, 5))
-        tk.Label(marco, text="ALBERGUE DE MASCOTAS", bg=BLANCO, fg=AZUL,
-                 font=("Arial", 15, "bold")).pack()
-        tk.Label(marco, text="PELUCHIN", bg=BLANCO, fg=TERRACOTA,
-                 font=("Arial", 23, "bold")).pack(pady=3)
-        tk.Label(marco, text="Sistema de Inventario y Suministros", bg=BLANCO,
-                 fg=GRIS, font=("Arial", 10)).pack(pady=(0, 22))
-        tk.Label(marco, text="Usuario", bg=BLANCO, fg=TEXTO, font=("Arial", 10, "bold")).pack(anchor="w", padx=55)
-        self.in_usuario = ttk.Entry(marco, width=37)
-        self.in_usuario.pack(pady=(5, 13), ipady=6)
-        tk.Label(marco, text="Contraseña", bg=BLANCO, fg=TEXTO, font=("Arial", 10, "bold")).pack(anchor="w", padx=55)
-        self.in_clave = ttk.Entry(marco, width=37, show="•")
-        self.in_clave.pack(pady=(5, 18), ipady=6)
+        izq = tk.Frame(self.root, bg=NEGRO, width=470)
+        izq.pack(side="left", fill="y")
+        izq.pack_propagate(False)
+        centro = tk.Frame(izq, bg=NEGRO)
+        centro.place(relx=.5, rely=.5, anchor="center")
+        if self.logos["grande"]:
+            tk.Label(centro, image=self.logos["grande"], bg=NEGRO).pack()
+        else:
+            tk.Label(centro, text="PELUCHIN", bg=NEGRO, fg=BLANCO, font=(FUENTE, 28, "bold")).pack()
+        tk.Label(centro, text="Sistema de Inventario y Suministros", bg=NEGRO, fg=NARANJA,
+                 font=(FUENTE, 12, "bold")).pack(pady=(14, 2))
+        tk.Label(centro, text="Cuidando a quienes nos necesitan", bg=NEGRO, fg="#BBBBBB",
+                 font=(FUENTE, 10, "italic")).pack()
+
+        der = tk.Frame(self.root, bg=FONDO)
+        der.pack(side="left", fill="both", expand=True)
+        tarjeta = tk.Frame(der, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
+        tarjeta.place(relx=.5, rely=.5, anchor="center", width=400, height=420)
+        tk.Frame(tarjeta, bg=NARANJA, height=6).pack(fill="x")
+        tk.Label(tarjeta, text="Iniciar sesión", bg=BLANCO, fg=NEGRO,
+                 font=(FUENTE, 20, "bold")).pack(pady=(26, 2))
+        tk.Label(tarjeta, text="Escribe tu usuario y contraseña para entrar", bg=BLANCO, fg=GRIS,
+                 font=(FUENTE, 10)).pack(pady=(0, 20))
+        tk.Label(tarjeta, text="👤  Usuario", bg=BLANCO, fg=TEXTO,
+                 font=(FUENTE, 10, "bold")).pack(anchor="w", padx=40)
+        self.in_usuario = ttk.Entry(tarjeta, width=34)
+        self.in_usuario.pack(pady=(4, 12), padx=40, fill="x")
+        tk.Label(tarjeta, text="🔒  Contraseña", bg=BLANCO, fg=TEXTO,
+                 font=(FUENTE, 10, "bold")).pack(anchor="w", padx=40)
+        self.in_clave = ttk.Entry(tarjeta, width=34, show="•")
+        self.in_clave.pack(pady=(4, 6), padx=40, fill="x")
         self.in_clave.bind("<Return>", lambda e: self.entrar())
-        tk.Button(marco, text="INGRESAR", command=self.entrar, bg=AZUL, fg=BLANCO,
-                  activebackground=VERDE, activeforeground=BLANCO, relief="flat",
-                  font=("Arial", 10, "bold"), cursor="hand2").pack(fill="x", padx=55, ipady=10)
-        tk.Label(marco, text="Cuidando a quienes nos necesitan ♥", bg=BLANCO,
-                 fg=GRIS, font=("Arial", 9, "italic")).pack(pady=22)
+        self.in_usuario.bind("<Return>", lambda e: self.in_clave.focus())
+        ver = tk.BooleanVar(value=False)
+        tk.Checkbutton(tarjeta, text="Mostrar contraseña", variable=ver, bg=BLANCO, fg=GRIS,
+                       activebackground=BLANCO, font=(FUENTE, 9), cursor="hand2",
+                       bd=0, highlightthickness=0,
+                       command=lambda: self.in_clave.configure(show="" if ver.get() else "•")
+                       ).pack(anchor="w", padx=36, pady=(0, 16))
+        boton(tarjeta, "INGRESAR AL SISTEMA", self.entrar, bg=NARANJA, fg=NEGRO,
+              pady=11, size=11).pack(fill="x", padx=40)
+        tk.Label(tarjeta, text="Si no tienes usuario, pídeselo al administrador.", bg=BLANCO,
+                 fg=GRIS, font=(FUENTE, 9)).pack(pady=16)
+        self.in_usuario.focus()
 
     def entrar(self):
         usuario = self.in_usuario.get().strip()
         clave = self.in_clave.get()
         if not usuario or not clave:
-            messagebox.showwarning("Acceso", "Escribe usuario y contraseña.")
+            messagebox.showwarning("Acceso", "Escribe tu usuario y tu contraseña.")
             return
         datos = autenticar(usuario, clave)
         if not datos:
@@ -189,140 +484,276 @@ class PeluchinApp:
         self.usuario = datos
         self.inicio()
 
-    def encabezado(self, contenedor):
-        head = tk.Frame(contenedor, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
-        head.pack(fill="x", padx=22, pady=(18, 14))
-        tk.Frame(head, bg=TERRACOTA, height=5).pack(fill="x")
-        fila = tk.Frame(head, bg=BLANCO)
-        fila.pack(fill="x", padx=18, pady=10)
-        tk.Label(fila, text="🐾  ALBERGUE DE MASCOTAS PELUCHIN", bg=BLANCO,
-                 fg=AZUL, font=("Arial", 17, "bold")).pack(side="left")
-        tk.Label(fila, text=f"{self.usuario['nombre']}  |  {self.usuario['rol']}",
-                 bg=BLANCO, fg=VERDE, font=("Arial", 9, "bold")).pack(side="right")
-        tk.Label(head, text="Sistema de Inventario y Suministros  •  Cuidando a quienes nos necesitan",
-                 bg=BLANCO, fg=GRIS, font=("Arial", 9)).pack(pady=(0, 10))
-
-    def inicio(self):
-        self.limpiar()
-        self.root.configure(bg=FONDO)
-        self.encabezado(self.root)
-        cuerpo = tk.Frame(self.root, bg=FONDO)
-        cuerpo.pack(fill="both", expand=True, padx=30, pady=5)
-        tk.Label(cuerpo, text="MENÚ PRINCIPAL", bg=FONDO, fg=AZUL,
-                 font=("Arial", 17, "bold")).pack(pady=(4, 14))
-        tarjetas = tk.Frame(cuerpo, bg=FONDO)
-        tarjetas.pack()
-        modulos = [
-            ("Productos", "📦"), ("Categorías", "▦"), ("Unidades de medida", "⚖"),
-            ("Inventario", "📋"), ("Lotes", "🧾"), ("Registrar entrada", "⬇"),
-            ("Registrar salida", "⬆"), ("Registrar entrega a mascota", "🐾"), ("Historial de movimientos", "🕘"),
-            ("Donaciones", "🎁"), ("Donantes", "🤝"), ("Instituciones", "🏢"),
-            ("Mascotas beneficiarias", "🐶"), ("Programas", "❤"), ("Inscribir mascota en programa", "🐾"),
-            ("Alertas y reportes", "📊"),
-        ]
-        if self.usuario["rol"] == "ADMIN":
-            modulos.append(("Usuarios", "👤"))
-        for i, (nombre, icono) in enumerate(modulos):
-            r, c = divmod(i, 3)
-            color = VERDE_CLARO if i % 2 == 0 else AZUL_CLARO
-            b = tk.Button(tarjetas, text=f"{icono}   {nombre.upper()}", width=34, height=2,
-                          command=lambda n=nombre: self.abrir(n), bg=BLANCO, fg=AZUL,
-                          activebackground=color, relief="solid", bd=1,
-                          highlightbackground=BORDE, font=("Arial", 9, "bold"), cursor="hand2")
-            b.grid(row=r, column=c, padx=8, pady=6, sticky="ew")
-        pie = tk.Frame(cuerpo, bg=FONDO)
-        pie.pack(fill="x", pady=15)
-        tk.Button(pie, text="VER RESUMEN GENERAL", command=self.resumen,
-                  bg=AZUL, fg=BLANCO, relief="flat", font=("Arial", 10, "bold"),
-                  padx=20, pady=9, cursor="hand2").pack(side="left", padx=10)
-        tk.Button(pie, text="CERRAR SESIÓN", command=self.cerrar_sesion,
-                  bg=TERRACOTA, fg=BLANCO, relief="flat", font=("Arial", 9, "bold"),
-                  padx=16, pady=9, cursor="hand2").pack(side="right", padx=10)
-
     def cerrar_sesion(self):
         self.usuario = None
         self.construir_login()
 
-    def abrir(self, nombre):
-        if nombre == "Usuarios" and self.usuario["rol"] != "ADMIN":
+    # ------------------------------------------------------------------
+    # Inicio (menú principal)
+    # ------------------------------------------------------------------
+    def barra_superior(self, titulo, subtitulo, con_volver):
+        barra = tk.Frame(self.root, bg=NEGRO)
+        barra.pack(fill="x")
+        logo = self.logos["pequeno"] if not con_volver else self.logos["mini"]
+        if logo:
+            lg = tk.Label(barra, image=logo, bg=NEGRO, cursor="hand2")
+            lg.pack(side="left", padx=(16, 8), pady=6)
+            lg.bind("<Button-1>", lambda e: self.inicio())
+        txt = tk.Frame(barra, bg=NEGRO)
+        txt.pack(side="left", pady=6)
+        tk.Label(txt, text=titulo, bg=NEGRO, fg=BLANCO, anchor="w",
+                 font=(FUENTE, 20 if not con_volver else 17, "bold")).pack(anchor="w")
+        tk.Label(txt, text=subtitulo, bg=NEGRO, fg="#BBBBBB", anchor="w",
+                 font=(FUENTE, 10)).pack(anchor="w")
+        der = tk.Frame(barra, bg=NEGRO)
+        der.pack(side="right", padx=18)
+        if con_volver:
+            boton(der, "⬅  VOLVER AL INICIO", self.inicio, bg=NARANJA, fg=NEGRO,
+                  pady=9, size=10).pack(side="right")
+        else:
+            boton(der, "Cerrar sesión", self.cerrar_sesion, bg="#333333", pady=6, size=9).pack(side="right", padx=(12, 0))
+            tk.Label(der, text=f"👤  {self.usuario['nombre']}", bg=NEGRO, fg=BLANCO,
+                     font=(FUENTE, 11, "bold")).pack(anchor="e")
+            tk.Label(der, text=f"Rol: {self.usuario['rol']}", bg=NEGRO, fg=NARANJA,
+                     font=(FUENTE, 9)).pack(anchor="e")
+        tk.Frame(self.root, bg=NARANJA, height=4).pack(fill="x")
+
+    def conteo_alertas(self):
+        cn = self.db()
+        if cn is None:
+            return None
+        cur = cn.cursor()
+        try:
+            cur.execute("""
+                SELECT COUNT(*) FROM (
+                  SELECT i.id_producto FROM Inventario i
+                  LEFT JOIN Lote l ON l.id_producto=i.id_producto
+                  GROUP BY i.id_producto, i.stock_minimo
+                  HAVING i.stock_minimo>0 AND
+                         COALESCE(SUM(CASE WHEN l.fecha_vencimiento IS NULL OR l.fecha_vencimiento>=CURDATE()
+                                           THEN l.cantidad_actual END),0) <= i.stock_minimo
+                ) z""")
+            bajo = cur.fetchone()[0]
+            cur.execute("""SELECT COUNT(*) FROM Lote WHERE cantidad_actual>0 AND fecha_vencimiento IS NOT NULL
+                           AND fecha_vencimiento>=CURDATE()
+                           AND fecha_vencimiento<=DATE_ADD(CURDATE(),INTERVAL 30 DAY)""")
+            por_vencer = cur.fetchone()[0]
+            cur.execute("""SELECT COUNT(*) FROM Lote WHERE cantidad_actual>0
+                           AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento<CURDATE()""")
+            vencidos = cur.fetchone()[0]
+            return bajo, por_vencer, vencidos
+        except Exception:
+            return None
+        finally:
+            cur.close()
+            cn.close()
+
+    def inicio(self):
+        self.limpiar()
+        self.root.configure(bg=FONDO)
+        self.barra_superior("Sistema de Inventario y Suministros",
+                            "Albergue de Mascotas «Peluchin»  •  Elige qué quieres hacer", False)
+
+        # Franja de alertas
+        datos = self.conteo_alertas()
+        if datos is None or sum(datos) == 0:
+            texto, color = "✔  Todo en orden: no hay productos con poco stock ni lotes por vencer.", VERDE
+        else:
+            b, p, v = datos
+            partes = []
+            if b:
+                partes.append(f"{b} producto(s) con poco stock")
+            if p:
+                partes.append(f"{p} lote(s) por vencer en 30 días")
+            if v:
+                partes.append(f"{v} lote(s) vencido(s)")
+            texto, color = "⚠  Atención: " + "  •  ".join(partes) + "   (clic para ver el detalle)", ROJO
+        franja = tk.Label(self.root, text=texto, bg=color, fg=BLANCO, font=(FUENTE, 10, "bold"),
+                          pady=8, cursor="hand2")
+        franja.pack(fill="x")
+        franja.bind("<Button-1>", lambda e: self.alertas())
+
+        cuerpo = tk.Frame(self.root, bg=FONDO)
+        cuerpo.pack(fill="both", expand=True, padx=18, pady=(14, 6))
+        secciones = [
+            ("📦  INVENTARIO", "Lo que hay en bodega y lo que entra o sale", NARANJA, [
+                ("🔄", "Registrar entrada o salida", "Ingreso de productos o entrega a mascotas", "mov"),
+                ("📋", "Existencias", "Cuánto hay de cada producto", "existencias"),
+                ("🏷", "Lotes y vencimientos", "Cantidades y fechas de vencimiento", "lotes"),
+                ("🕘", "Historial de movimientos", "Todas las entradas y salidas", "historial"),
+                ("📦", "Productos", "Crear y editar los productos", "Productos"),
+            ]),
+            ("🐶  MASCOTAS", "Los animales que viven en el albergue", CELESTE, [
+                ("🐶", "Mascotas", "Registrar y editar cada mascota", "Mascotas"),
+                ("🍽", "Consumo por mascota", "Lo que recibe cada mascota", "Consumo por mascota"),
+                ("❤", "Cuidados especiales", "Programas de atención especial", "Cuidados especiales"),
+                ("📝", "Inscribir en un cuidado", "Asignar una mascota a un cuidado especial",
+                 "Inscribir mascota en cuidado especial"),
+            ]),
+            ("🎁  DONACIONES", "Las personas e instituciones que ayudan", ROSA, [
+                ("🎁", "Donaciones recibidas", "Registrar y consultar donaciones", "Donaciones"),
+                ("🤝", "Donantes", "Personas o instituciones que donan", "Donantes"),
+                ("🏢", "Instituciones", "Empresas y fundaciones aliadas", "Instituciones"),
+            ]),
+            ("⚙  LISTAS Y USUARIOS", "Opciones de los menús y accesos al sistema", VERDE, [
+                ("🗂", "Categorías de productos", "Alimento, medicina, limpieza...", "Categorías de productos"),
+                ("⚖", "Unidades de medida", "kg, bolsa, caja, dosis...", "Unidades de medida"),
+                ("🐾", "Especies", "Perro, gato...", "Especies"),
+                ("🐕", "Razas", "Razas de cada especie", "Razas"),
+                ("👤", "Usuarios", "Quién puede usar el sistema", "Usuarios"),
+            ]),
+        ]
+        for c in range(4):
+            cuerpo.grid_columnconfigure(c, weight=1, uniform="col")
+        for c, (titulo, desc, color, acciones) in enumerate(secciones):
+            tarj = tk.Frame(cuerpo, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
+            tarj.grid(row=0, column=c, sticky="nsew", padx=6)
+            tk.Frame(tarj, bg=color, height=7).pack(fill="x")
+            cab = tk.Frame(tarj, bg=BLANCO)
+            cab.pack(fill="x", padx=12, pady=(10, 0))
+            icono_s, nombre_s = titulo.split("  ", 1)
+            tk.Label(cab, text=icono_s, bg=BLANCO, fg=color, font=(FUENTE_EMOJI, 14)).pack(side="left")
+            tk.Label(cab, text=nombre_s, bg=BLANCO, fg=NEGRO, anchor="w",
+                     font=(FUENTE, 12, "bold")).pack(side="left", padx=(6, 0))
+            tk.Label(tarj, text=desc, bg=BLANCO, fg=GRIS, anchor="w", justify="left", wraplength=250,
+                     font=(FUENTE, 9)).pack(fill="x", padx=12, pady=(0, 8))
+            for icono, nombre, d, destino in acciones:
+                if destino == "Usuarios" and self.usuario["rol"] != "ADMIN":
+                    continue
+                Accion(tarj, icono, nombre, d, lambda dst=destino: self.abrir(dst), color
+                       ).pack(fill="x", padx=10, pady=4)
+            tk.Frame(tarj, bg=BLANCO, height=6).pack()
+
+        pie = tk.Frame(self.root, bg=FONDO)
+        pie.pack(fill="x", padx=24, pady=(8, 14))
+        boton(pie, "🚨  ALERTAS: STOCK BAJO Y VENCIMIENTOS", self.alertas, bg=ROJO, pady=10).pack(side="left", padx=4)
+        boton(pie, "📊  RESUMEN GENERAL", self.resumen, bg=NEGRO, pady=10).pack(side="left", padx=4)
+
+    def abrir(self, destino):
+        if destino == "Usuarios" and self.usuario["rol"] != "ADMIN":
             messagebox.showwarning("Acceso restringido", "Solo un ADMIN puede administrar usuarios.")
             return
-        if nombre in CONFIG:
-            self.crud(nombre)
-        elif nombre == "Registrar entrada":
-            self.form_entrada()
-        elif nombre == "Registrar salida":
-            self.form_salida(False)
-        elif nombre == "Registrar entrega a mascota":
-            self.form_salida(True)
-        elif nombre == "Inventario":
-            self.inventario()
-        elif nombre == "Lotes":
+        if destino in MODULOS:
+            self.crud(destino)
+        elif destino == "mov":
+            self.form_movimientos()
+        elif destino == "existencias":
+            self.existencias()
+        elif destino == "lotes":
             self.lotes()
-        elif nombre == "Historial de movimientos":
+        elif destino == "historial":
             self.historial()
-        elif nombre == "Alertas y reportes":
-            self.alertas()
 
-    def pantalla_modulo(self, titulo):
+    def pantalla_modulo(self, titulo, ayuda="", icono=""):
         self.root.configure(bg=FONDO)
-        barra = tk.Frame(self.root, bg=AZUL)
-        barra.pack(fill="x")
-        tk.Label(barra, text=f"🐾  PELUCHIN  |  {titulo.upper()}", bg=AZUL, fg=BLANCO,
-                 font=("Arial", 14, "bold")).pack(side="left", padx=20, pady=14)
-        tk.Button(barra, text="VOLVER AL MENÚ", command=self.inicio, bg=BLANCO, fg=AZUL,
-                  relief="flat", padx=12, pady=6).pack(side="right", padx=18)
+        self.barra_superior(f"{icono}  {titulo}".strip(), "Sistema de Inventario y Suministros", True)
+        if ayuda:
+            banda = tk.Frame(self.root, bg=AYUDA_BG)
+            banda.pack(fill="x")
+            tk.Label(banda, text="ℹ  " + ayuda, bg=AYUDA_BG, fg="#5B4A00", justify="left", anchor="w",
+                     wraplength=1160, font=(FUENTE, 10)).pack(fill="x", padx=20, pady=8)
         self.area = tk.Frame(self.root, bg=FONDO)
         self.area.pack(fill="both", expand=True)
 
     # ------------------------------------------------------------------
-    # Mantenimiento (CRUD)
+    # Pantallas de registro (altas, cambios y bajas)
     # ------------------------------------------------------------------
-    def crud(self, nombre):
-        tabla, campos, etiquetas = CONFIG[nombre]
-        pk_cols = PK[tabla]
-        compuesta = all(c in campos for c in pk_cols)
-        cols_sel = list(campos) if compuesta else pk_cols + list(campos)
+    def crud(self, clave):
+        m = MODULOS[clave]
+        tabla, pk, pref = m["tabla"], m["pk"], m["prefijo"]
+        col_cod = m.get("col_codigo", "codigo")
+        campos_def = m["campos"]
+        campos = [f["campo"] for f in campos_def]
+        virtuales = m.get("virtuales", {})
+        extras = m.get("extras", [])
+        fks = [f["campo"] for f in campos_def if f["tipo"] == "fk"]
 
         self.limpiar()
-        self.pantalla_modulo(nombre)
+        self.pantalla_modulo(clave, m["ayuda"], m["icono"])
         cont = self.area
-        form = tk.LabelFrame(cont, text="Datos del registro", bg=BLANCO, fg=AZUL, padx=10, pady=10)
-        form.pack(fill="x", padx=20, pady=10)
-        entradas = {}
-        opc_fk = {}
-        for i, (campo, etiqueta) in enumerate(zip(campos, etiquetas)):
-            tk.Label(form, text=etiqueta, bg=BLANCO, fg=TEXTO).grid(
-                row=i // 3 * 2, column=i % 3, sticky="w", padx=6, pady=(4, 0))
-            if campo in FK_SQL:
-                opc_fk[campo] = self.opciones(FK_SQL[campo], vacio=(campo in OPCIONALES))
-                ent = ttk.Combobox(form, width=30, state="readonly", values=opc_fk[campo])
-            elif campo in ENUMS:
-                ent = ttk.Combobox(form, width=30, state="readonly", values=ENUMS[campo])
-            else:
-                ent = ttk.Entry(form, width=32, show="•" if campo == "contrasena_hash" else "")
-            ent.grid(row=i // 3 * 2 + 1, column=i % 3, sticky="ew", padx=6, pady=(2, 7))
-            entradas[campo] = ent
+
+        # ---------------- Formulario ----------------
+        tarjeta = tk.Frame(cont, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
+        tarjeta.pack(fill="x", padx=20, pady=(12, 6))
+        lbl_modo = tk.Label(tarjeta, text="", bg=BLANCO, fg=NEGRO, font=(FUENTE, 12, "bold"), anchor="w")
+        lbl_modo.pack(fill="x", padx=14, pady=(10, 0))
+        form = tk.Frame(tarjeta, bg=BLANCO)
+        form.pack(fill="x", padx=14, pady=(2, 8))
         for c in range(3):
-            form.grid_columnconfigure(c, weight=1)
+            form.grid_columnconfigure(c, weight=1, uniform="f")
 
+        widgets = {}
+        for i, f in enumerate(campos_def):
+            etiqueta = f["etiqueta"] + (" *" if f["req"] else "  (opcional)")
+            tk.Label(form, text=etiqueta, bg=BLANCO, fg=TEXTO, font=(FUENTE, 9, "bold"), anchor="w").grid(
+                row=i // 3 * 2, column=i % 3, sticky="w", padx=6, pady=(6, 0))
+            t = f["tipo"]
+            if t == "fk":
+                w = ttk.Combobox(form, state="readonly", width=30,
+                                 values=[] if f.get("depende") else self.opciones_fk(f["campo"], vacio=not f["req"]))
+            elif t == "enum":
+                w = ttk.Combobox(form, state="readonly", width=30, values=ENUMS[f["campo"]])
+            elif t == "bool":
+                w = ttk.Combobox(form, state="readonly", width=30, values=ENUMS["activo"])
+            else:
+                w = self.entrada(form, t, 32, show="•" if t == "clave" else "")
+            w.grid(row=i // 3 * 2 + 1, column=i % 3, sticky="ew", padx=6, pady=(2, 4))
+            widgets[f["campo"]] = w
+
+        # La raza depende de la especie elegida
+        for f in campos_def:
+            if f.get("depende"):
+                padre, hijo = widgets[f["depende"]], widgets[f["campo"]]
+
+                def recargar(event=None, padre=padre, hijo=hijo, campo=f["campo"], req=f["req"]):
+                    hijo.set("")
+                    hijo["values"] = self.opciones_fk(campo, self.id_de(padre.get()), vacio=not req)
+                padre.bind("<<ComboboxSelected>>", recargar)
+
+        # ---------------- Botones y buscador ----------------
         barra = tk.Frame(cont, bg=FONDO)
-        barra.pack(fill="x", padx=20, pady=5)
+        barra.pack(fill="x", padx=20, pady=4)
+        buscar = tk.StringVar()
         caja = tk.Frame(cont, bg=FONDO)
-        caja.pack(fill="both", expand=True, padx=20, pady=10)
-        tabla_ui = ttk.Treeview(caja, columns=cols_sel, show="headings", height=14)
-        sb = ttk.Scrollbar(caja, orient="vertical", command=tabla_ui.yview)
-        tabla_ui.configure(yscrollcommand=sb.set)
-        sb.pack(side="right", fill="y")
-        tabla_ui.pack(side="left", fill="both", expand=True)
-        for col in cols_sel:
-            tabla_ui.heading(col, text=col.replace("_", " ").upper())
-            tabla_ui.column(col, width=130, anchor="center")
 
-        seleccionado = {"id": None}   # tupla con los valores de la clave primaria
+        # ---------------- Tabla ----------------
+        cols = ["_pk", "codigo"] + campos + [e[0] for e in extras] + ["_fk_" + c for c in fks]
+        visibles = ["codigo"] + campos + [e[0] for e in extras]
+        tv = ttk.Treeview(caja, columns=cols, displaycolumns=visibles, show="headings", height=11)
+        sb = ttk.Scrollbar(caja, orient="vertical", command=tv.yview)
+        tv.configure(yscrollcommand=sb.set)
+        tv.heading("codigo", text="CÓDIGO")
+        tv.column("codigo", width=95, anchor="w", stretch=False)
+        for f in campos_def:
+            nombre_col = titulo_columna(f["etiqueta"]).upper()
+            tv.heading(f["campo"], text=nombre_col)
+            tv.column(f["campo"], width=max(120, len(nombre_col) * 10 + 28), anchor="w")
+        for nombre, titulo, _ in extras:
+            tv.heading(nombre, text=titulo.upper())
+            tv.column(nombre, width=100, anchor="center")
+        tv.tag_configure("par", background=BLANCO)
+        tv.tag_configure("impar", background="#FFF4E5")
+        sb.pack(side="right", fill="y")
+        tv.pack(side="left", fill="both", expand=True)
+
+        estado = {"id": None, "filas": []}
+
+        def expr_campo(f):
+            c, t = f["campo"], f["tipo"]
+            if t == "fk":
+                ref, pkr, txt = FK_INFO[c]
+                e = f"(SELECT {txt} FROM {ref} x WHERE x.{pkr}=t.`{c}`)"
+                return f"COALESCE({e},'{f['nulo']}')" if f.get("nulo") else e
+            if t == "bool":
+                return f"IF(t.`{c}`,'Sí','No')"
+            if t == "clave":
+                return "'••••••••'"
+            if c in virtuales:
+                return virtuales[c]
+            return f"t.`{c}`"
 
         def poner(campo, texto):
-            w = entradas[campo]
+            w = widgets[campo]
             if isinstance(w, ttk.Combobox):
                 w.set(texto)
             else:
@@ -330,118 +761,149 @@ class PeluchinApp:
                 w.insert(0, texto)
 
         def limpiar_form():
-            seleccionado["id"] = None
-            for c in campos:
-                defecto = DEFAULTS.get(c, date.today().isoformat() if c in FECHA_HOY else "")
-                poner(c, defecto)
-            tabla_ui.selection_remove(tabla_ui.selection())
+            estado["id"] = None
+            lbl_modo.configure(text="🆕  Nuevo registro  —  llena los datos y presiona «Guardar»")
+            for f in campos_def:
+                defecto = f.get("default", date.today().isoformat() if f.get("hoy") else "")
+                poner(f["campo"], defecto)
+                if f.get("depende"):
+                    widgets[f["campo"]]["values"] = []
+            tv.selection_remove(tv.selection())
+
+        def mostrar(*_):
+            for i in tv.get_children():
+                tv.delete(i)
+            filtro = buscar.get().strip().lower()
+            n = 0
+            for fila in estado["filas"]:
+                if filtro and not any(filtro in str(v).lower() for v in fila[1:len(visibles) + 1]):
+                    continue
+                tv.insert("", "end", values=fila, tags=("par" if n % 2 == 0 else "impar",))
+                n += 1
 
         def cargar():
-            for item in tabla_ui.get_children():
-                tabla_ui.delete(item)
+            sel = [f"t.`{pk}`", f"t.`{col_cod}`"] + [expr_campo(f) for f in campos_def] \
+                  + [e[2] for e in extras] + [f"t.`{c}`" for c in fks]
             cn = self.db()
             if not cn:
                 return
             cur = cn.cursor()
             try:
-                cols = ", ".join(f"`{c}`" for c in cols_sel)
-                cur.execute(f"SELECT {cols} FROM `{tabla}` ORDER BY 1 DESC")
-                for fila in cur.fetchall():
-                    fila = ["" if v is None else v for v in fila]
-                    if tabla == "Usuario":
-                        fila[cols_sel.index("contrasena_hash")] = "••••••••"
-                    tabla_ui.insert("", "end", values=fila)
+                cur.execute(f"SELECT {', '.join(sel)} FROM `{tabla}` t ORDER BY t.`{pk}` DESC")
+                estado["filas"] = [["" if v is None else v for v in fila] for fila in cur.fetchall()]
             except Exception as e:
-                messagebox.showerror("Consulta", str(e))
+                messagebox.showerror("Consulta", texto_error(e))
             finally:
                 cur.close()
                 cn.close()
+            mostrar()
 
         def elegir(event=None):
-            sel = tabla_ui.selection()
+            sel = tv.selection()
             if not sel:
                 return
-            valores = tabla_ui.item(sel[0], "values")
-            if compuesta:
-                seleccionado["id"] = tuple(valores[cols_sel.index(c)] for c in pk_cols)
-                datos = valores
-            else:
-                seleccionado["id"] = tuple(valores[:len(pk_cols)])
-                datos = valores[len(pk_cols):]
-            for campo, valor in zip(campos, datos):
-                if campo == "contrasena_hash":
-                    poner(campo, "")
-                elif campo in FK_SQL:
-                    poner(campo, next((o for o in opc_fk[campo] if o.split(" - ")[0] == str(valor)), ""))
+            fila = dict(zip(cols, tv.item(sel[0], "values")))
+            estado["id"] = fila["_pk"]
+            lbl_modo.configure(text=f"✏  Editando el registro {fila['codigo']}  —  cambia los datos y presiona "
+                                    f"«Guardar», o «Nuevo» para cancelar")
+            for f in campos_def:
+                c, t = f["campo"], f["tipo"]
+                if t == "clave":
+                    poner(c, "")
+                elif t == "fk":
+                    idv = str(fila["_fk_" + c])
+                    if f.get("depende"):
+                        po = widgets[f["depende"]].get()
+                        padre_id = self.id_de(po) if po else None
+                        widgets[c]["values"] = self.opciones_fk(c, padre_id, vacio=not f["req"])
+                    opts = list(widgets[c]["values"])
+                    poner(c, next((o for o in opts if o.split(" - ")[0] == idv), ""))
                 else:
-                    poner(campo, str(valor))
-        tabla_ui.bind("<<TreeviewSelect>>", elegir)
+                    poner(c, str(fila[c]))
+        tv.bind("<<TreeviewSelect>>", elegir)
 
         def guardar():
             try:
-                valores = []
-                for campo, etiqueta in zip(campos, etiquetas):
-                    v = entradas[campo].get().strip()
-                    if campo == "contrasena_hash":
-                        if v:
-                            if len(v) < 8:
+                valores = {}
+                for f in campos_def:
+                    c, t = f["campo"], f["tipo"]
+                    texto = widgets[c].get().strip()
+                    et = f["etiqueta"].split(" (")[0]
+                    if t == "clave":
+                        if texto:
+                            if len(texto) < 8:
                                 raise ValueError("La contraseña debe tener al menos 8 caracteres.")
-                            v = generar_hash(v)
-                        elif seleccionado["id"] is not None:
-                            v = None   # al editar, vacío = conservar la contraseña actual
+                            valores[c] = generar_hash(texto)
+                        elif estado["id"] is not None:
+                            valores[c] = None          # conservar la contraseña actual
                         else:
                             raise ValueError("La contraseña es obligatoria para un usuario nuevo.")
-                    elif v == "":
-                        if campo in OPCIONALES:
-                            v = None
-                        else:
-                            raise ValueError(f"Completa el campo: {etiqueta}.")
-                    elif campo in FK_SQL:
-                        v = self.id_de(v)
-                    elif campo in CAMPOS_FECHA:
-                        v = self.leer_fecha(v, etiqueta).isoformat()
-                    elif campo == "edad_aprox":
-                        if not v.isdigit():
-                            raise ValueError("La edad aproximada debe ser un número entero (0 o más).")
-                        v = int(v)
-                    elif campo == "stock_minimo":
-                        try:
-                            v = Decimal(v.replace(",", "."))
-                        except InvalidOperation:
-                            raise ValueError("El stock mínimo debe ser un número.")
-                        if not v.is_finite() or v < 0:
-                            raise ValueError("El stock mínimo no puede ser negativo.")
-                    elif campo in ("rol", "tipo_donante"):
-                        v = v.upper()
-                    valores.append(v)
+                        continue
+                    if texto == "":
+                        if f["req"]:
+                            raise ValueError(f"Completa el campo: {et}.")
+                        valores[c] = None
+                        continue
+                    if t == "fk":
+                        valores[c] = self.id_de(texto)
+                    elif t == "fecha":
+                        valores[c] = self.leer_fecha(texto, et).isoformat()
+                    elif t == "entero":
+                        if not texto.isdigit():
+                            raise ValueError(f"{et}: escribe solo números.")
+                        valores[c] = texto
+                    elif t == "decimal":
+                        valores[c] = self.leer_cantidad(texto, et, permitir_cero=True)
+                    elif t == "decimal+":
+                        valores[c] = self.leer_cantidad(texto, et)
+                    elif t == "bool":
+                        valores[c] = 1 if texto == "Sí" else 0
+                    elif t == "enum" and c in ("rol", "tipo_donante"):
+                        valores[c] = texto.upper()
+                    else:
+                        valores[c] = texto
 
-                datos = dict(zip(campos, valores))
+                # Reglas del negocio
                 if tabla == "Donante":
-                    if datos["tipo_donante"] == "INSTITUCION" and datos["id_institucion"] is None:
+                    if valores["tipo_donante"] == "INSTITUCION" and valores["id_institucion"] is None:
                         raise ValueError("Para un donante INSTITUCION elige la institución.")
-                    if datos["tipo_donante"] == "PERSONA" and datos["id_institucion"] is not None:
-                        raise ValueError("Una PERSONA no lleva institución; déjala en blanco.")
-                if (tabla == "Usuario" and seleccionado["id"] is not None
-                        and str(seleccionado["id"][0]) == str(self.usuario["id"])
-                        and str(datos["activo"]) == "0"):
+                    if valores["tipo_donante"] == "PERSONA" and valores["id_institucion"] is not None:
+                        raise ValueError("Una PERSONA no lleva institución; deja ese campo vacío.")
+                if tabla == "Mascota" and valores["fecha_salida"] and valores["fecha_salida"] < valores["fecha_ingreso"]:
+                    raise ValueError("La fecha de salida no puede ser anterior a la de ingreso.")
+                if tabla == "Cuidados_Especiales" and valores["fecha_inicio"] and valores["fecha_fin"] \
+                        and valores["fecha_fin"] < valores["fecha_inicio"]:
+                    raise ValueError("La fecha de fin no puede ser anterior a la de inicio.")
+                if (tabla == "Usuario" and estado["id"] is not None
+                        and str(estado["id"]) == str(self.usuario["id"]) and valores["activo"] == 0):
                     raise ValueError("No puedes desactivar tu propia cuenta.")
 
+                reales = [c for c in campos if c not in virtuales]
                 cn = self.db()
                 if not cn:
                     return
                 cur = cn.cursor()
                 try:
-                    if seleccionado["id"] is not None:
-                        pares = [(c, v) for c, v in zip(campos, valores)
-                                 if not (c == "contrasena_hash" and v is None)]
+                    if estado["id"] is not None:
+                        pares = [(c, valores[c]) for c in reales
+                                 if not (c == "contrasena_hash" and valores[c] is None)]
                         asign = ", ".join(f"`{c}`=%s" for c, _ in pares)
-                        donde = " AND ".join(f"`{c}`=%s" for c in pk_cols)
-                        cur.execute(f"UPDATE `{tabla}` SET {asign} WHERE {donde}",
-                                    tuple(v for _, v in pares) + tuple(seleccionado["id"]))
+                        cur.execute(f"UPDATE `{tabla}` SET {asign} WHERE `{pk}`=%s",
+                                    tuple(v for _, v in pares) + (estado["id"],))
+                        if tabla == "Producto":
+                            cur.execute("UPDATE Inventario SET stock_minimo=%s WHERE id_producto=%s",
+                                        (valores["stock_minimo"], estado["id"]))
                     else:
-                        cols = ", ".join(f"`{c}`" for c in campos)
-                        marks = ", ".join(["%s"] * len(campos))
-                        cur.execute(f"INSERT INTO `{tabla}` ({cols}) VALUES ({marks})", tuple(valores))
+                        codigo = siguiente_codigo(cur, tabla, col_cod, pref)
+                        cols_ins = [col_cod] + [c for c in reales if c != col_cod]
+                        vals = [codigo] + [valores[c] for c in reales if c != col_cod]
+                        marks = ", ".join(["%s"] * len(cols_ins))
+                        cur.execute(f"INSERT INTO `{tabla}` ({', '.join(f'`{c}`' for c in cols_ins)}) "
+                                    f"VALUES ({marks})", tuple(vals))
+                        if tabla == "Producto":
+                            cod_inv = siguiente_codigo(cur, "Inventario", "codigo", "INV")
+                            cur.execute("INSERT INTO Inventario(codigo,id_producto,stock_actual,stock_minimo) "
+                                        "VALUES(%s,%s,0,%s)", (cod_inv, cur.lastrowid, valores["stock_minimo"]))
                     cn.commit()
                 except Exception:
                     cn.rollback()
@@ -453,31 +915,32 @@ class PeluchinApp:
                 limpiar_form()
                 cargar()
             except ValueError as e:
-                messagebox.showwarning("Validación", str(e))
+                messagebox.showwarning("Revisa los datos", str(e))
             except Exception as e:
-                messagebox.showerror("No se pudo guardar", f"Verifica los datos y las relaciones.\n\n{e}")
+                messagebox.showerror("No se pudo guardar", texto_error(e))
 
         def eliminar():
-            if seleccionado["id"] is None:
-                messagebox.showwarning("Eliminar", "Selecciona un registro.")
+            if estado["id"] is None:
+                messagebox.showwarning("Eliminar", "Primero elige un registro de la tabla.")
                 return
-            if tabla == "Usuario" and str(seleccionado["id"][0]) == str(self.usuario["id"]):
+            if tabla == "Usuario" and str(estado["id"]) == str(self.usuario["id"]):
                 messagebox.showwarning("Eliminar", "No puedes eliminar tu propia cuenta.")
                 return
-            if not messagebox.askyesno("Confirmar", "¿Deseas eliminar el registro seleccionado?"):
+            if not messagebox.askyesno("Confirmar", "¿Seguro que deseas eliminar el registro seleccionado?\n"
+                                                    "Esta acción no se puede deshacer."):
                 return
             cn = self.db()
             if not cn:
                 return
             cur = cn.cursor()
             try:
-                donde = " AND ".join(f"`{c}`=%s" for c in pk_cols)
-                cur.execute(f"DELETE FROM `{tabla}` WHERE {donde}", tuple(seleccionado["id"]))
+                if tabla == "Producto":
+                    cur.execute("DELETE FROM Inventario WHERE id_producto=%s AND stock_actual=0", (estado["id"],))
+                cur.execute(f"DELETE FROM `{tabla}` WHERE `{pk}`=%s", (estado["id"],))
                 cn.commit()
             except Exception as e:
                 cn.rollback()
-                messagebox.showerror("No se puede eliminar",
-                                     f"El registro puede estar relacionado con otros datos.\n{e}")
+                messagebox.showerror("No se puede eliminar", texto_error(e))
                 return
             finally:
                 cur.close()
@@ -485,259 +948,207 @@ class PeluchinApp:
             limpiar_form()
             cargar()
 
-        tk.Button(barra, text="GUARDAR / ACTUALIZAR", command=guardar, bg=VERDE, fg=BLANCO,
-                  relief="flat", padx=12, pady=7).pack(side="left", padx=4)
-        tk.Button(barra, text="NUEVO / LIMPIAR", command=limpiar_form, bg=AZUL, fg=BLANCO,
-                  relief="flat", padx=12, pady=7).pack(side="left", padx=4)
-        tk.Button(barra, text="ELIMINAR", command=eliminar, bg=TERRACOTA, fg=BLANCO,
-                  relief="flat", padx=12, pady=7).pack(side="left", padx=4)
-        tk.Button(barra, text="ACTUALIZAR LISTA", command=cargar, bg=GRIS, fg=BLANCO,
-                  relief="flat", padx=12, pady=7).pack(side="left", padx=4)
+        boton(barra, "💾  GUARDAR", guardar, bg=VERDE).pack(side="left", padx=(0, 6))
+        boton(barra, "🆕  NUEVO / LIMPIAR", limpiar_form, bg=AZUL).pack(side="left", padx=6)
+        boton(barra, "🗑  ELIMINAR", eliminar, bg=ROJO).pack(side="left", padx=6)
+        boton(barra, "🔄  ACTUALIZAR LISTA", cargar, bg=GRIS).pack(side="left", padx=6)
+        tk.Label(barra, text="🔎 Buscar:", bg=FONDO, fg=TEXTO, font=(FUENTE, 10, "bold")).pack(side="left", padx=(30, 4))
+        ttk.Entry(barra, textvariable=buscar, width=26).pack(side="left")
+        buscar.trace_add("write", mostrar)
+
+        caja.pack(fill="both", expand=True, padx=20, pady=(4, 12))
         cargar()
         limpiar_form()
+        # Referencias de la pantalla actual (útiles para pruebas automáticas)
+        self.pantalla = dict(widgets=widgets, guardar=guardar, eliminar=eliminar,
+                             nuevo=limpiar_form, tabla=tv, elegir=elegir, buscar=buscar)
 
     # ------------------------------------------------------------------
-    # Entrada de stock (crea un lote)
+    # Movimientos: entradas y salidas en una sola pantalla
     # ------------------------------------------------------------------
-    def form_entrada(self):
+    def form_movimientos(self):
         self.limpiar()
-        self.pantalla_modulo("Registrar entrada")
-        f = tk.Frame(self.area, bg=BLANCO, padx=24, pady=22, highlightbackground=BORDE, highlightthickness=1)
-        f.pack(fill="x", padx=35, pady=25)
-        f.grid_columnconfigure(1, weight=1)
-        tk.Label(f, text="REGISTRAR ENTRADA", bg=BLANCO, fg=AZUL, font=("Arial", 15, "bold")).grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+        self.pantalla_modulo(
+            "Registrar entrada o salida",
+            "Elige ENTRADA cuando llegan productos (compra, donación...) o SALIDA cuando salen "
+            "(alimentación, entrega a una mascota o institución...). Agrega los productos a la lista y presiona «Registrar».",
+            "🔄")
+        tipo = tk.StringVar(value="ENTRADA")
+        items = []          # [id_producto, nombre, cantidad, vencimiento(date|None)]
 
-        def etiqueta(r, texto):
-            tk.Label(f, text=texto, bg=BLANCO, fg=TEXTO).grid(row=r, column=0, sticky="w", pady=7)
+        sel = tk.Frame(self.area, bg=FONDO)
+        sel.pack(fill="x", padx=20, pady=(12, 4))
+        btn_ent = tk.Button(sel, text="⬇  ENTRADA  —  ingresan productos", relief="flat", bd=0, cursor="hand2",
+                            font=(FUENTE, 11, "bold"), padx=22, pady=10,
+                            command=lambda: cambiar("ENTRADA"))
+        btn_sal = tk.Button(sel, text="⬆  SALIDA  —  salen productos", relief="flat", bd=0, cursor="hand2",
+                            font=(FUENTE, 11, "bold"), padx=22, pady=10,
+                            command=lambda: cambiar("SALIDA"))
+        btn_ent.pack(side="left", padx=(0, 8))
+        btn_sal.pack(side="left")
 
-        etiqueta(1, "Producto")
-        cb_prod = ttk.Combobox(f, state="readonly", values=self.opciones(SQL_PRODUCTOS))
-        cb_prod.grid(row=1, column=1, sticky="ew", pady=7, padx=10)
-        etiqueta(2, "Cantidad")
-        e_cant = ttk.Entry(f, width=42)
-        e_cant.grid(row=2, column=1, sticky="ew", pady=7, padx=10)
-        etiqueta(3, "Donación de origen (opcional)")
-        cb_don = ttk.Combobox(f, state="readonly", values=self.opciones(
-            "SELECT id_donacion, CONCAT(codigo,' (',fecha_recepcion,')') FROM Donacion "
-            "ORDER BY fecha_recepcion DESC", vacio=True))
-        cb_don.grid(row=3, column=1, sticky="ew", pady=7, padx=10)
-        etiqueta(4, "Fecha de ingreso (YYYY-MM-DD)")
-        e_fecha = ttk.Entry(f, width=42)
-        e_fecha.grid(row=4, column=1, sticky="ew", pady=7, padx=10)
-        e_fecha.insert(0, date.today().isoformat())
-        etiqueta(5, "Fecha de vencimiento (opcional)")
-        e_venc = ttk.Entry(f, width=42)
-        e_venc.grid(row=5, column=1, sticky="ew", pady=7, padx=10)
-        etiqueta(6, "Observación")
-        e_obs = ttk.Entry(f, width=42)
-        e_obs.grid(row=6, column=1, sticky="ew", pady=7, padx=10)
+        f = tk.Frame(self.area, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
+        f.pack(fill="both", expand=True, padx=20, pady=(2, 12))
+        form = tk.Frame(f, bg=BLANCO)
+        form.pack(fill="x", padx=16, pady=(10, 4))
+        form.grid_columnconfigure(1, weight=1, uniform="m")
+        form.grid_columnconfigure(3, weight=1, uniform="m")
 
-        def guardar():
-            try:
-                producto = self.id_de(cb_prod.get())
-                if producto is None:
-                    raise ValueError("Selecciona un producto.")
-                cantidad = self.leer_cantidad(e_cant.get())
-                f_ing = self.leer_fecha(e_fecha.get(), "Fecha de ingreso")
-                f_ven = self.leer_fecha(e_venc.get(), "Fecha de vencimiento", obligatoria=False)
-                if f_ven and f_ven < f_ing:
-                    raise ValueError("El vencimiento no puede ser anterior a la fecha de ingreso.")
-                donacion = self.id_de(cb_don.get())
-                obs = e_obs.get().strip() or None
-                cn = self.db()
-                if not cn:
-                    return
-                cur = cn.cursor()
-                try:
-                    cur.execute("INSERT INTO Movimiento(tipo_movimiento,id_usuario,observacion) "
-                                "VALUES('ENTRADA',%s,%s)", (self.usuario["id"], obs))
-                    mid = cur.lastrowid
-                    cur.execute("""INSERT INTO Lote(id_producto,id_donacion,cantidad_inicial,cantidad_actual,
-                                                    fecha_ingreso,fecha_vencimiento)
-                                   VALUES(%s,%s,%s,%s,%s,%s)""",
-                                (producto, donacion, cantidad, cantidad, f_ing, f_ven))
-                    lote = cur.lastrowid
-                    cur.execute("INSERT INTO Detalle_Movimiento(id_movimiento,id_lote,cantidad) VALUES(%s,%s,%s)",
-                                (mid, lote, cantidad))
-                    cn.commit()
-                except Exception:
-                    cn.rollback()
-                    raise
-                finally:
-                    cur.close()
-                    cn.close()
-                messagebox.showinfo("Correcto", f"Entrada registrada.\nN.º movimiento: {mid}\nN.º lote creado: {lote}")
-                cb_prod["values"] = self.opciones(SQL_PRODUCTOS)
-                cb_prod.set("")
-                cb_don.set("")
-                for e in (e_cant, e_venc, e_obs):
-                    e.delete(0, "end")
-            except ValueError as e:
-                messagebox.showerror("Datos incorrectos", str(e))
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+        def etiqueta(r, c, texto):
+            lb = tk.Label(form, text=texto, bg=BLANCO, fg=TEXTO, font=(FUENTE, 9, "bold"), anchor="w")
+            lb.grid(row=r, column=c, sticky="w", padx=(0, 8), pady=5)
+            return lb
 
-        tk.Button(f, text="GUARDAR ENTRADA", command=guardar, bg=VERDE, fg=BLANCO,
-                  relief="flat", padx=18, pady=9).grid(row=7, column=0, columnspan=2, pady=18)
+        etiqueta(0, 0, "Producto *")
+        cb_prod = ttk.Combobox(form, state="readonly", values=self.opciones(SQL_PRODUCTOS))
+        cb_prod.grid(row=0, column=1, sticky="ew", padx=(0, 20), pady=5)
+        etiqueta(0, 2, "Cantidad *")
+        e_cant = self.entrada(form, "decimal", 20)
+        e_cant.grid(row=0, column=3, sticky="w", pady=5)
 
-    # ------------------------------------------------------------------
-    # Salida de stock (lote que vence primero) y entrega a mascota
-    # ------------------------------------------------------------------
-    def crear_salida(self, cur, items, obs):
-        """items = [(id_producto, nombre, cantidad)]. Descuenta primero el lote que vence antes.
-        Los lotes vencidos no se entregan. Devuelve el id del Movimiento SALIDA."""
-        plan = []
-        for id_producto, nombre, cantidad in items:
-            cur.execute("""SELECT id_lote, cantidad_actual FROM Lote
-                           WHERE id_producto=%s AND cantidad_actual>0
-                             AND (fecha_vencimiento IS NULL OR fecha_vencimiento>=CURDATE())
-                           ORDER BY fecha_vencimiento IS NULL, fecha_vencimiento, fecha_ingreso, id_lote
-                           FOR UPDATE""", (id_producto,))
-            pendiente = cantidad
-            for id_lote, actual in cur.fetchall():
-                if pendiente <= 0:
-                    break
-                tomar = min(Decimal(str(actual)), pendiente)
-                plan.append((id_lote, tomar))
-                pendiente -= tomar
-            if pendiente > 0:
-                raise ValueError(f"Stock vigente insuficiente de «{nombre}». "
-                                 f"Faltan {pendiente} (los lotes vencidos no se entregan).")
-        cur.execute("INSERT INTO Movimiento(tipo_movimiento,id_usuario,observacion) VALUES('SALIDA',%s,%s)",
-                    (self.usuario["id"], obs))
-        mid = cur.lastrowid
-        for id_lote, tomar in plan:
-            cur.execute("UPDATE Lote SET cantidad_actual=cantidad_actual-%s WHERE id_lote=%s", (tomar, id_lote))
-            cur.execute("INSERT INTO Detalle_Movimiento(id_movimiento,id_lote,cantidad) VALUES(%s,%s,%s)",
-                        (mid, id_lote, tomar))
-        return mid
+        etiqueta(1, 0, "Concepto *")
+        cb_conc = ttk.Combobox(form, values=CONCEPTOS_ENTRADA)
+        cb_conc.grid(row=1, column=1, sticky="ew", padx=(0, 20), pady=5)
 
-    def form_salida(self, con_entrega=False):
-        titulo = "Registrar entrega a mascota" if con_entrega else "Registrar salida"
-        self.limpiar()
-        self.pantalla_modulo(titulo)
-        f = tk.Frame(self.area, bg=BLANCO, padx=24, pady=18, highlightbackground=BORDE, highlightthickness=1)
-        f.pack(fill="both", expand=True, padx=35, pady=20)
-        f.grid_columnconfigure(1, weight=1)
-        r = 0
-        tk.Label(f, text=titulo.upper(), bg=BLANCO, fg=AZUL, font=("Arial", 15, "bold")).grid(
-            row=r, column=0, columnspan=3, sticky="w", pady=(0, 12))
-        r += 1
+        # Solo ENTRADA
+        lb_venc = etiqueta(1, 2, "Vence (AAAA-MM-DD)  (opcional)")
+        e_venc = ttk.Entry(form, width=20)
+        e_venc.grid(row=1, column=3, sticky="w", pady=5)
+        lb_fing = etiqueta(2, 0, "Fecha de ingreso (AAAA-MM-DD) *")
+        e_fing = ttk.Entry(form, width=20)
+        e_fing.grid(row=2, column=1, sticky="w", pady=5)
+        e_fing.insert(0, date.today().isoformat())
+        # Solo SALIDA
+        lb_dest = etiqueta(1, 2, "Destinatario *  (quién recibe)")
+        e_dest = ttk.Entry(form, width=30)
+        e_dest.grid(row=1, column=3, sticky="ew", pady=5)
+        lb_masc = etiqueta(2, 0, "Mascota beneficiaria  (opcional)")
+        cb_masc = ttk.Combobox(form, state="readonly", values=self.opciones(
+            "SELECT id_mascota, CONCAT(nombre,' (',codigo,')') FROM Mascota "
+            "WHERE fecha_salida IS NULL ORDER BY nombre", vacio=True))
+        cb_masc.grid(row=2, column=1, sticky="ew", padx=(0, 20), pady=5)
 
-        cb_prog = cb_masc = None
-        if con_entrega:
-            tk.Label(f, text="Programa", bg=BLANCO, fg=TEXTO).grid(row=r, column=0, sticky="w", pady=6)
-            cb_prog = ttk.Combobox(f, state="readonly", values=self.opciones(
-                "SELECT id_programa, nombre FROM Programa ORDER BY nombre"))
-            cb_prog.grid(row=r, column=1, columnspan=2, sticky="ew", padx=10)
-            r += 1
-            tk.Label(f, text="Mascota inscrita", bg=BLANCO, fg=TEXTO).grid(row=r, column=0, sticky="w", pady=6)
-            cb_masc = ttk.Combobox(f, state="readonly")
-            cb_masc.grid(row=r, column=1, columnspan=2, sticky="ew", padx=10)
-            r += 1
+        def al_elegir_mascota(event=None):
+            if cb_masc.get():
+                e_dest.delete(0, "end")
+                e_dest.insert(0, "Mascota: " + cb_masc.get().split(" - ", 1)[1])
+        cb_masc.bind("<<ComboboxSelected>>", al_elegir_mascota)
 
-            def cargar_mascotas(event=None):
-                cb_masc.set("")
-                idp = self.id_de(cb_prog.get())
-                if idp is None:
-                    cb_masc["values"] = []
-                    return
-                lista = self.opciones(
-                    """SELECT b.id_beneficiario, CONCAT(b.nombre,' (',b.especie,')')
-                       FROM Programa_Beneficiario pb
-                       JOIN Beneficiario b ON b.id_beneficiario=pb.id_beneficiario
-                       WHERE pb.id_programa=%s ORDER BY b.nombre""", (idp,))
-                cb_masc["values"] = lista
-                if not lista:
-                    messagebox.showinfo("Programa", "Este programa no tiene mascotas inscritas.\n"
-                                                    "Inscríbelas primero en «Inscribir mascota en programa».")
-            cb_prog.bind("<<ComboboxSelected>>", cargar_mascotas)
+        etiqueta(2, 2, "Observación  (opcional)")
+        e_obs = ttk.Entry(form, width=30)
+        e_obs.grid(row=2, column=3, sticky="ew", pady=5)
 
-        tk.Label(f, text="Producto", bg=BLANCO, fg=TEXTO).grid(row=r, column=0, sticky="w", pady=6)
-        cb_prod = ttk.Combobox(f, state="readonly", values=self.opciones(SQL_PRODUCTOS))
-        cb_prod.grid(row=r, column=1, columnspan=2, sticky="ew", padx=10)
-        r += 1
-        tk.Label(f, text="Cantidad", bg=BLANCO, fg=TEXTO).grid(row=r, column=0, sticky="w", pady=6)
-        e_cant = ttk.Entry(f, width=20)
-        e_cant.grid(row=r, column=1, sticky="w", padx=10)
-        tk.Button(f, text="AGREGAR A LA LISTA", command=lambda: agregar(), bg=AZUL, fg=BLANCO,
-                  relief="flat", padx=10, pady=4).grid(row=r, column=2, padx=6)
-        r += 1
+        solo_entrada = [lb_venc, e_venc, lb_fing, e_fing]
+        solo_salida = [lb_dest, e_dest, lb_masc, cb_masc]
 
-        tv = ttk.Treeview(f, columns=("producto", "cantidad"), show="headings", height=7)
+        fila_add = tk.Frame(f, bg=BLANCO)
+        fila_add.pack(fill="x", padx=16, pady=(2, 4))
+        tv = ttk.Treeview(f, columns=("producto", "cantidad", "vence"), show="headings", height=6)
         tv.heading("producto", text="PRODUCTO")
         tv.heading("cantidad", text="CANTIDAD")
-        tv.column("producto", width=420, anchor="w")
+        tv.heading("vence", text="VENCE")
+        tv.column("producto", width=480, anchor="w")
         tv.column("cantidad", width=120, anchor="center")
-        tv.grid(row=r, column=0, columnspan=3, sticky="nsew", pady=10)
-        f.grid_rowconfigure(r, weight=1)
-        r += 1
+        tv.column("vence", width=140, anchor="center")
+        tv.tag_configure("par", background=BLANCO)
+        tv.tag_configure("impar", background="#FFF4E5")
+        tv.pack(fill="both", expand=True, padx=16, pady=4)
+        fila_fin = tk.Frame(f, bg=BLANCO)
+        fila_fin.pack(fill="x", padx=16, pady=(4, 12))
 
-        tk.Label(f, text="Observación", bg=BLANCO, fg=TEXTO).grid(row=r, column=0, sticky="w", pady=6)
-        e_obs = ttk.Entry(f, width=50)
-        e_obs.grid(row=r, column=1, columnspan=2, sticky="ew", padx=10)
-        r += 1
-
-        items = {}   # id_producto -> [nombre, cantidad]
-
-        def refrescar():
+        def refrescar_lista():
             for i in tv.get_children():
                 tv.delete(i)
-            for pid, (nom, cant) in items.items():
-                tv.insert("", "end", iid=str(pid), values=(nom, cant))
+            for n, (pid, nom, cant, venc) in enumerate(items):
+                tv.insert("", "end", iid=str(n), tags=("par" if n % 2 == 0 else "impar",),
+                          values=(nom, cant, venc.isoformat() if venc else "—"))
 
         def recargar_productos():
             cb_prod["values"] = self.opciones(SQL_PRODUCTOS)
             cb_prod.set("")
             e_cant.delete(0, "end")
 
+        def cambiar(nuevo, forzar=False):
+            if nuevo != tipo.get() and items and not forzar:
+                if not messagebox.askyesno("Cambiar tipo", "La lista actual se vaciará. ¿Continuar?"):
+                    return
+                items.clear()
+                refrescar_lista()
+            tipo.set(nuevo)
+            ent = nuevo == "ENTRADA"
+            btn_ent.configure(bg=VERDE if ent else "#E9E2D6", fg=BLANCO if ent else GRIS)
+            btn_sal.configure(bg=NARANJA if not ent else "#E9E2D6", fg=NEGRO if not ent else GRIS)
+            for w in solo_entrada:
+                (w.grid if ent else w.grid_remove)()
+            for w in solo_salida:
+                (w.grid if not ent else w.grid_remove)()
+            cb_conc["values"] = CONCEPTOS_ENTRADA if ent else CONCEPTOS_SALIDA
+            cb_conc.set("")
+            btn_reg.configure(text="✔  REGISTRAR ENTRADA" if ent else "✔  REGISTRAR SALIDA",
+                              bg=VERDE if ent else NARANJA, fg=BLANCO if ent else NEGRO)
+
         def agregar():
             try:
                 texto = cb_prod.get()
                 pid = self.id_de(texto)
                 if pid is None:
-                    raise ValueError("Selecciona un producto.")
+                    raise ValueError("Elige un producto.")
                 cant = self.leer_cantidad(e_cant.get())
+                venc = None
+                if tipo.get() == "ENTRADA":
+                    venc = self.leer_fecha(e_venc.get(), "Fecha de vencimiento", obligatoria=False)
+                    f_ing = self.leer_fecha(e_fing.get(), "Fecha de ingreso")
+                    if venc and venc < f_ing:
+                        raise ValueError("El vencimiento no puede ser anterior a la fecha de ingreso.")
             except ValueError as e:
-                messagebox.showerror("Datos incorrectos", str(e))
+                messagebox.showerror("Revisa los datos", str(e))
                 return
             nom = texto.split(" - ", 1)[1].split(" [")[0]
-            if pid in items:
-                items[pid][1] += cant
+            if tipo.get() == "SALIDA":
+                for it in items:
+                    if it[0] == pid:
+                        it[2] += cant
+                        break
+                else:
+                    items.append([pid, nom, cant, None])
             else:
-                items[pid] = [nom, cant]
-            refrescar()
+                items.append([pid, nom, cant, venc])
+            refrescar_lista()
             cb_prod.set("")
             e_cant.delete(0, "end")
+            e_venc.delete(0, "end")
 
         def quitar():
-            sel = tv.selection()
-            if sel:
-                items.pop(int(sel[0]), None)
-                refrescar()
+            sel_ = tv.selection()
+            if sel_:
+                items.pop(int(sel_[0]))
+                refrescar_lista()
+            else:
+                messagebox.showinfo("Quitar", "Elige primero una fila de la lista.")
 
         def registrar():
             try:
                 if not items:
-                    raise ValueError("Agrega al menos un producto a la lista.")
-                idp = idb = None
-                if con_entrega:
-                    idp = self.id_de(cb_prog.get())
-                    idb = self.id_de(cb_masc.get())
-                    if idp is None or idb is None:
-                        raise ValueError("Selecciona el programa y la mascota.")
+                    raise ValueError("Agrega al menos un producto a la lista (botón «Agregar a la lista»).")
+                concepto = cb_conc.get().strip()
+                if not concepto:
+                    raise ValueError("Escribe o elige el concepto del movimiento.")
+                es_ent = tipo.get() == "ENTRADA"
+                dest = e_dest.get().strip()
+                if not es_ent and not dest:
+                    raise ValueError("En una salida debes indicar el destinatario.")
+                f_ing = self.leer_fecha(e_fing.get(), "Fecha de ingreso") if es_ent else date.today()
                 obs = e_obs.get().strip() or None
-                lista = [(pid, nom, cant) for pid, (nom, cant) in items.items()]
+                id_masc = self.id_de(cb_masc.get()) if not es_ent else None
                 cn = self.db()
                 if not cn:
                     return
                 cur = cn.cursor()
                 try:
-                    mid = self.crear_salida(cur, lista, obs)
-                    if con_entrega:
-                        cur.execute("INSERT INTO Entrega(id_programa,id_beneficiario,id_movimiento) "
-                                    "VALUES(%s,%s,%s)", (idp, idb, mid))
+                    if es_ent:
+                        mid, cod_mov = self.crear_entrada(cur, items, concepto, f_ing, obs)
+                    else:
+                        mid, cod_mov = self.crear_salida(cur, items, concepto, dest, obs, id_masc)
                     cn.commit()
                 except Exception:
                     cn.rollback()
@@ -745,36 +1156,115 @@ class PeluchinApp:
                 finally:
                     cur.close()
                     cn.close()
-                messagebox.showinfo("Correcto", ("Entrega" if con_entrega else "Salida") +
-                                    f" registrada.\nN.º movimiento: {mid}")
+                messagebox.showinfo("Correcto", f"{'Entrada' if es_ent else 'Salida'} registrada.\n"
+                                                f"Código del movimiento: {cod_mov}")
                 items.clear()
-                refrescar()
-                e_obs.delete(0, "end")
+                refrescar_lista()
+                for e in (e_obs, e_dest, e_venc):
+                    e.delete(0, "end")
+                cb_masc.set("")
+                cb_conc.set("")
                 recargar_productos()
             except ValueError as e:
-                messagebox.showerror("Datos incorrectos", str(e))
+                messagebox.showerror("Revisa los datos", str(e))
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("No se pudo registrar", texto_error(e))
 
-        botones = tk.Frame(f, bg=BLANCO)
-        botones.grid(row=r, column=0, columnspan=3, pady=12)
-        tk.Button(botones, text="QUITAR SELECCIONADO", command=quitar, bg=TERRACOTA, fg=BLANCO,
-                  relief="flat", padx=14, pady=8).pack(side="left", padx=8)
-        tk.Button(botones, text="REGISTRAR " + ("ENTREGA" if con_entrega else "SALIDA"),
-                  command=registrar, bg=VERDE, fg=BLANCO, relief="flat", padx=18, pady=8).pack(side="left", padx=8)
+        boton(fila_add, "➕  AGREGAR A LA LISTA", agregar, bg=AZUL).pack(side="left")
+        tk.Label(fila_add, text="  Agrega todos los productos del movimiento y luego presiona «Registrar».",
+                 bg=BLANCO, fg=GRIS, font=(FUENTE, 9)).pack(side="left")
+        boton(fila_fin, "✖  QUITAR LA FILA ELEGIDA", quitar, bg=GRIS).pack(side="left")
+        btn_reg = boton(fila_fin, "", registrar, bg=VERDE, pady=10, size=11)
+        btn_reg.pack(side="right")
+        cambiar("ENTRADA", forzar=True)
+        self.pantalla = dict(cambiar=cambiar, producto=cb_prod, cantidad=e_cant, concepto=cb_conc,
+                             vence=e_venc, destinatario=e_dest, mascota=cb_masc, agregar=agregar,
+                             registrar=registrar, lista=tv, items=items, obs=e_obs)
+
+    def asegurar_inventario(self, cur, id_producto):
+        cur.execute("SELECT id_inventario FROM Inventario WHERE id_producto=%s FOR UPDATE", (id_producto,))
+        if cur.fetchone() is None:
+            cod = siguiente_codigo(cur, "Inventario", "codigo", "INV")
+            cur.execute("INSERT INTO Inventario(codigo,id_producto,stock_actual,stock_minimo) "
+                        "VALUES(%s,%s,0,0)", (cod, id_producto))
+
+    def crear_entrada(self, cur, items, concepto, f_ing, obs):
+        """Cada producto que entra genera un lote. Suma al inventario."""
+        cod_mov = siguiente_codigo(cur, "Movimiento", "codigo", "MOV")
+        cur.execute("INSERT INTO Movimiento(codigo,tipo_movimiento,id_usuario,observacion) "
+                    "VALUES(%s,'ENTRADA',%s,%s)", (cod_mov, self.usuario["id"], obs))
+        mid = cur.lastrowid
+        for pid, _nom, cant, venc in items:
+            self.asegurar_inventario(cur, pid)
+            cod_lote = siguiente_codigo(cur, "Lote", "codigo", "LOT")
+            cur.execute("""INSERT INTO Lote(codigo,id_producto,cantidad_inicial,cantidad_actual,
+                                            fecha_ingreso,fecha_vencimiento)
+                           VALUES(%s,%s,%s,%s,%s,%s)""", (cod_lote, pid, cant, cant, f_ing, venc))
+            lote = cur.lastrowid
+            cod_det = siguiente_codigo(cur, "Detalle_Movimiento", "codigo", "DET")
+            cur.execute("""INSERT INTO Detalle_Movimiento(codigo,id_movimiento,id_lote,cantidad,concepto,destinatario)
+                           VALUES(%s,%s,%s,%s,%s,NULL)""", (cod_det, mid, lote, cant, concepto))
+            cur.execute("UPDATE Inventario SET stock_actual=stock_actual+%s WHERE id_producto=%s", (cant, pid))
+        return mid, cod_mov
+
+    def crear_salida(self, cur, items, concepto, destinatario, obs, id_mascota=None):
+        """Descuenta primero el lote que vence antes. Los lotes vencidos no se entregan.
+        Si hay mascota beneficiaria, también anota lo que recibió en Beneficiario."""
+        plan = []          # (id_producto, id_lote, cantidad)
+        for pid, nombre, cantidad, _ in items:
+            cur.execute("""SELECT id_lote, cantidad_actual FROM Lote
+                           WHERE id_producto=%s AND cantidad_actual>0
+                             AND (fecha_vencimiento IS NULL OR fecha_vencimiento>=CURDATE())
+                           ORDER BY fecha_vencimiento IS NULL, fecha_vencimiento, fecha_ingreso, id_lote
+                           FOR UPDATE""", (pid,))
+            pendiente = cantidad
+            for id_lote, actual in cur.fetchall():
+                if pendiente <= 0:
+                    break
+                tomar = min(Decimal(str(actual)), pendiente)
+                plan.append((pid, id_lote, tomar))
+                pendiente -= tomar
+            if pendiente > 0:
+                raise ValueError(f"No hay stock vigente suficiente de «{nombre}». "
+                                 f"Faltan {pendiente} (los lotes vencidos no se entregan).")
+        cod_mov = siguiente_codigo(cur, "Movimiento", "codigo", "MOV")
+        cur.execute("INSERT INTO Movimiento(codigo,tipo_movimiento,id_usuario,observacion) "
+                    "VALUES(%s,'SALIDA',%s,%s)", (cod_mov, self.usuario["id"], obs))
+        mid = cur.lastrowid
+        for pid, id_lote, tomar in plan:
+            self.asegurar_inventario(cur, pid)
+            cur.execute("UPDATE Lote SET cantidad_actual=cantidad_actual-%s WHERE id_lote=%s", (tomar, id_lote))
+            cod_det = siguiente_codigo(cur, "Detalle_Movimiento", "codigo", "DET")
+            cur.execute("""INSERT INTO Detalle_Movimiento(codigo,id_movimiento,id_lote,cantidad,concepto,destinatario)
+                           VALUES(%s,%s,%s,%s,%s,%s)""", (cod_det, mid, id_lote, tomar, concepto, destinatario))
+            cur.execute("UPDATE Inventario SET stock_actual=stock_actual-%s WHERE id_producto=%s", (tomar, pid))
+        if id_mascota:
+            for pid, _nom, cant, _v in items:
+                cur.execute("SELECT id_categoria, id_unidad FROM Producto WHERE id_producto=%s", (pid,))
+                cat, uni = cur.fetchone()
+                cod_ben = siguiente_codigo(cur, "Beneficiario", "cod_beneficiario", "BEN")
+                cur.execute("""INSERT INTO Beneficiario(cod_beneficiario,id_mascota,id_categoria,fecha,id_unidad,cantidad)
+                               VALUES(%s,%s,%s,CURDATE(),%s,%s)""", (cod_ben, id_mascota, cat, uni, cant))
+        return mid, cod_mov
 
     # ------------------------------------------------------------------
     # Consultas
     # ------------------------------------------------------------------
-    def tabla_consulta(self, sql, encabezados):
-        caja = tk.Frame(self.area, bg=BLANCO)
-        caja.pack(fill="both", expand=True, padx=22, pady=15)
+    def tabla_consulta(self, sql, encabezados, col_estado=None, anchos=None):
+        caja = tk.Frame(self.area, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
+        caja.pack(fill="both", expand=True, padx=20, pady=12)
         tv = ttk.Treeview(caja, columns=encabezados, show="headings")
         sb = ttk.Scrollbar(caja, orient="vertical", command=tv.yview)
         tv.configure(yscrollcommand=sb.set)
-        for col in encabezados:
+        for i, col in enumerate(encabezados):
             tv.heading(col, text=col)
-            tv.column(col, width=130, anchor="center")
+            tv.column(col, width=(anchos or {}).get(col, 100), minwidth=70, anchor="center")
+        tags = {"STOCK BAJO": "#FFE0E0", "SIN STOCK": "#E6E6E6", "AGOTADO": "#E6E6E6", "VENCIDO": "#FFD0D0",
+                "POR VENCER": "#FFF0C2", "ENTRADA": "#E3F4E8", "SALIDA": "#FFEAD3"}
+        for nombre, color in tags.items():
+            tv.tag_configure(nombre, background=color)
+        tv.tag_configure("par", background=BLANCO)
+        tv.tag_configure("impar", background="#FFF4E5")
         sb.pack(side="right", fill="y")
         tv.pack(side="left", fill="both", expand=True)
         cn = self.db()
@@ -782,39 +1272,54 @@ class PeluchinApp:
             cur = cn.cursor()
             try:
                 cur.execute(sql)
-                for row in cur.fetchall():
-                    tv.insert("", "end", values=["" if v is None else v for v in row])
+                for n, row in enumerate(cur.fetchall()):
+                    vals = ["" if v is None else v for v in row]
+                    etiqueta = vals[col_estado] if col_estado is not None else None
+                    tag = etiqueta if etiqueta in tags else ("par" if n % 2 == 0 else "impar")
+                    tv.insert("", "end", values=vals, tags=(tag,))
             except Exception as e:
-                messagebox.showerror("Consulta", str(e))
+                messagebox.showerror("Consulta", texto_error(e))
             finally:
                 cur.close()
                 cn.close()
 
-    def inventario(self):
+    def leyenda(self, texto):
+        tk.Label(self.area, text=texto, bg=FONDO, fg=GRIS, font=(FUENTE, 9)).pack(pady=(0, 8))
+
+    def existencias(self):
         self.limpiar()
-        self.pantalla_modulo("Inventario actual")
+        self.pantalla_modulo("Existencias", "Cuánto hay de cada producto. «Vigente» es lo que se puede usar; "
+                                            "«Vencido» es lo que ya no sirve. Las filas en color necesitan atención.", "📋")
         self.tabla_consulta("""
-            SELECT p.id_producto, p.nombre, c.nombre, u.abreviatura,
-                   COALESCE(SUM(CASE WHEN l.fecha_vencimiento IS NULL OR l.fecha_vencimiento>=CURDATE()
-                                     THEN l.cantidad_actual END),0) AS vigente,
-                   COALESCE(SUM(CASE WHEN l.fecha_vencimiento<CURDATE()
-                                     THEN l.cantidad_actual END),0) AS vencido,
-                   p.stock_minimo
-            FROM Producto p
-            JOIN Categoria c ON c.id_categoria=p.id_categoria
-            JOIN Unidad_Medida u ON u.id_unidad=p.id_unidad
-            LEFT JOIN Lote l ON l.id_producto=p.id_producto
-            GROUP BY p.id_producto,p.nombre,c.nombre,u.abreviatura,p.stock_minimo
-            ORDER BY p.nombre
-        """, ["ID", "PRODUCTO", "CATEGORÍA", "UNIDAD", "EXISTENCIA VIGENTE", "VENCIDO", "STOCK MÍNIMO"])
+            SELECT z.*, CASE WHEN z.vigente<=0 THEN 'SIN STOCK'
+                             WHEN z.stock_minimo>0 AND z.vigente<=z.stock_minimo THEN 'STOCK BAJO'
+                             ELSE 'OK' END AS estado
+            FROM (
+              SELECT p.codigo, p.nombre, c.nombre AS categoria, COALESCE(e.nombre,'Todas') AS especie,
+                     u.abreviatura, COALESCE(i.stock_actual,0) AS stock_total,
+                     COALESCE(SUM(CASE WHEN l.fecha_vencimiento IS NULL OR l.fecha_vencimiento>=CURDATE()
+                                       THEN l.cantidad_actual END),0) AS vigente,
+                     COALESCE(SUM(CASE WHEN l.fecha_vencimiento<CURDATE() THEN l.cantidad_actual END),0) AS vencido,
+                     COALESCE(i.stock_minimo,0) AS stock_minimo
+              FROM Producto p
+              JOIN Categoria c ON c.id_categoria=p.id_categoria
+              JOIN Unidad_Medida u ON u.id_unidad=p.id_unidad
+              LEFT JOIN Especie e ON e.id_especie=p.id_especie
+              LEFT JOIN Inventario i ON i.id_producto=p.id_producto
+              LEFT JOIN Lote l ON l.id_producto=p.id_producto
+              GROUP BY p.id_producto, p.codigo, p.nombre, c.nombre, e.nombre, u.abreviatura,
+                       i.stock_actual, i.stock_minimo
+            ) z ORDER BY z.nombre
+        """, ["CÓDIGO", "PRODUCTO", "CATEGORÍA", "ESPECIE", "UNIDAD", "STOCK TOTAL", "VIGENTE", "VENCIDO",
+              "STOCK MÍNIMO", "ESTADO"], col_estado=9, anchos={"PRODUCTO": 190})
 
     def lotes(self):
         self.limpiar()
-        self.pantalla_modulo("Lotes")
+        self.pantalla_modulo("Lotes y vencimientos", "Cada vez que entra un producto se crea un lote con su cantidad "
+                                                     "y fecha de vencimiento. Al hacer una salida se usa primero el lote que vence antes.", "🏷")
         self.tabla_consulta("""
-            SELECT l.id_lote, p.nombre, u.abreviatura, l.cantidad_inicial, l.cantidad_actual,
+            SELECT l.codigo, p.nombre, u.abreviatura, l.cantidad_inicial, l.cantidad_actual,
                    l.fecha_ingreso, l.fecha_vencimiento,
-                   COALESCE(d.codigo,'Compra / sin donación'),
                    CASE WHEN l.cantidad_actual=0 THEN 'AGOTADO'
                         WHEN l.fecha_vencimiento IS NOT NULL AND l.fecha_vencimiento<CURDATE() THEN 'VENCIDO'
                         WHEN l.fecha_vencimiento IS NOT NULL
@@ -823,48 +1328,45 @@ class PeluchinApp:
             FROM Lote l
             JOIN Producto p ON p.id_producto=l.id_producto
             JOIN Unidad_Medida u ON u.id_unidad=p.id_unidad
-            LEFT JOIN Donacion d ON d.id_donacion=l.id_donacion
             ORDER BY (l.cantidad_actual=0), l.fecha_vencimiento IS NULL, l.fecha_vencimiento, l.id_lote
-        """, ["LOTE", "PRODUCTO", "UNIDAD", "CANT. INICIAL", "CANT. ACTUAL",
-              "INGRESO", "VENCE", "DONACIÓN", "ESTADO"])
+        """, ["LOTE", "PRODUCTO", "UNIDAD", "CANT. INICIAL", "CANT. ACTUAL", "INGRESO", "VENCE", "ESTADO"],
+            col_estado=7, anchos={"PRODUCTO": 200})
 
     def historial(self):
         self.limpiar()
-        self.pantalla_modulo("Historial de movimientos")
+        self.pantalla_modulo("Historial de movimientos", "Todas las entradas (verde) y salidas (naranja) registradas, "
+                                                         "con su concepto, destinatario y el usuario que las hizo.", "🕘")
         self.tabla_consulta("""
-            SELECT m.id_movimiento, m.fecha, m.tipo_movimiento, p.nombre, d.id_lote, d.cantidad,
-                   us.nombre_usuario,
-                   COALESCE(CONCAT(pr.nombre,' / ',b.nombre),'') AS entrega
+            SELECT m.codigo, m.fecha, m.tipo_movimiento, p.nombre, l.codigo, d.cantidad, d.concepto,
+                   COALESCE(d.destinatario,''), us.nombre_usuario, COALESCE(m.observacion,'')
             FROM Movimiento m
             JOIN Usuario us ON us.id_usuario=m.id_usuario
             JOIN Detalle_Movimiento d ON d.id_movimiento=m.id_movimiento
             JOIN Lote l ON l.id_lote=d.id_lote
             JOIN Producto p ON p.id_producto=l.id_producto
-            LEFT JOIN Entrega e ON e.id_movimiento=m.id_movimiento
-            LEFT JOIN Programa pr ON pr.id_programa=e.id_programa
-            LEFT JOIN Beneficiario b ON b.id_beneficiario=e.id_beneficiario
-            ORDER BY m.fecha DESC, m.id_movimiento DESC
+            ORDER BY m.fecha DESC, m.id_movimiento DESC, d.id_detalle
             LIMIT 500
-        """, ["N.º MOV.", "FECHA", "TIPO", "PRODUCTO", "LOTE", "CANTIDAD", "USUARIO", "ENTREGA (PROGRAMA / MASCOTA)"])
+        """, ["MOVIMIENTO", "FECHA", "TIPO", "PRODUCTO", "LOTE", "CANTIDAD", "CONCEPTO", "DESTINATARIO",
+              "USUARIO", "OBSERVACIÓN"], col_estado=2, anchos={"PRODUCTO": 160, "CONCEPTO": 160, "FECHA": 140})
 
     def alertas(self):
         self.limpiar()
-        self.pantalla_modulo("Alertas y reportes")
-        tk.Label(self.area, text="STOCK BAJO, LOTES VENCIDOS Y PRÓXIMOS A VENCER",
-                 bg=FONDO, fg=AZUL, font=("Arial", 13, "bold")).pack(pady=15)
+        self.pantalla_modulo("Alertas: stock bajo y vencimientos", "Productos con poco stock, lotes vencidos y lotes que "
+                                                                   "vencen en los próximos 30 días. Conviene revisarlos pronto.", "🚨")
         self.tabla_consulta("""
-            SELECT 'STOCK BAJO' AS alerta, p.nombre AS producto, NULL AS lote,
+            SELECT 'STOCK BAJO' AS alerta, p.nombre AS producto, '' AS lote,
                    COALESCE(SUM(CASE WHEN l.fecha_vencimiento IS NULL OR l.fecha_vencimiento>=CURDATE()
                                      THEN l.cantidad_actual END),0) AS cantidad,
-                   u.abreviatura AS unidad, CONCAT('Mínimo: ', p.stock_minimo) AS detalle
-            FROM Producto p
+                   u.abreviatura AS unidad, CONCAT('Mínimo: ', i.stock_minimo) AS detalle
+            FROM Inventario i
+            JOIN Producto p ON p.id_producto=i.id_producto
             JOIN Unidad_Medida u ON u.id_unidad=p.id_unidad
             LEFT JOIN Lote l ON l.id_producto=p.id_producto
-            GROUP BY p.id_producto,p.nombre,p.stock_minimo,u.abreviatura
-            HAVING p.stock_minimo>0 AND cantidad<=p.stock_minimo
+            GROUP BY p.id_producto,p.nombre,i.stock_minimo,u.abreviatura
+            HAVING i.stock_minimo>0 AND cantidad<=i.stock_minimo
             UNION ALL
             SELECT CASE WHEN l.fecha_vencimiento<CURDATE() THEN 'VENCIDO' ELSE 'POR VENCER' END,
-                   p.nombre, l.id_lote, l.cantidad_actual, u.abreviatura,
+                   p.nombre, l.codigo, l.cantidad_actual, u.abreviatura,
                    CONCAT('Vence: ', l.fecha_vencimiento)
             FROM Lote l
             JOIN Producto p ON p.id_producto=l.id_producto
@@ -872,38 +1374,41 @@ class PeluchinApp:
             WHERE l.cantidad_actual>0 AND l.fecha_vencimiento IS NOT NULL
               AND l.fecha_vencimiento<=DATE_ADD(CURDATE(),INTERVAL 30 DAY)
             ORDER BY 1, 2
-        """, ["ALERTA", "PRODUCTO", "LOTE", "CANTIDAD", "UNIDAD", "DETALLE"])
-        tk.Label(self.area, text="Por vencer = dentro de los próximos 30 días. El stock bajo cuenta solo lotes vigentes.",
-                 bg=FONDO, fg=GRIS).pack(pady=8)
+        """, ["ALERTA", "PRODUCTO", "LOTE", "CANTIDAD", "UNIDAD", "DETALLE"], col_estado=0,
+            anchos={"PRODUCTO": 220, "DETALLE": 180})
+        self.leyenda("Por vencer = dentro de los próximos 30 días. El stock bajo cuenta solo los lotes vigentes.")
 
     def resumen(self):
         self.limpiar()
-        self.pantalla_modulo("Resumen general")
+        self.pantalla_modulo("Resumen general", "Un vistazo rápido a los números del albergue.", "📊")
         cn = self.db()
         if not cn:
             return
         cur = cn.cursor()
         consultas = [
-            ("Productos registrados", "SELECT COUNT(*) FROM Producto"),
-            ("Mascotas beneficiarias", "SELECT COUNT(*) FROM Beneficiario"),
-            ("Donaciones recibidas", "SELECT COUNT(*) FROM Donacion"),
-            ("Programas activos", "SELECT COUNT(*) FROM Programa WHERE fecha_fin IS NULL OR fecha_fin>=CURDATE()"),
+            ("Productos registrados", "SELECT COUNT(*) FROM Producto", NARANJA),
+            ("Mascotas en el albergue", "SELECT COUNT(*) FROM Mascota WHERE fecha_salida IS NULL", CELESTE),
+            ("Donaciones recibidas", "SELECT COUNT(*) FROM Donacion", ROSA),
+            ("Cuidados especiales activos",
+             "SELECT COUNT(*) FROM Cuidados_Especiales WHERE fecha_fin IS NULL OR fecha_fin>=CURDATE()", VERDE),
             ("Lotes con existencia vigente",
-             "SELECT COUNT(*) FROM Lote WHERE cantidad_actual>0 AND (fecha_vencimiento IS NULL OR fecha_vencimiento>=CURDATE())"),
-            ("Entregas realizadas a mascotas", "SELECT COUNT(*) FROM Entrega"),
+             "SELECT COUNT(*) FROM Lote WHERE cantidad_actual>0 AND (fecha_vencimiento IS NULL OR fecha_vencimiento>=CURDATE())",
+             NARANJA),
+            ("Movimientos registrados", "SELECT COUNT(*) FROM Movimiento", AZUL),
         ]
         caja = tk.Frame(self.area, bg=FONDO)
         caja.pack(fill="x", padx=30, pady=25)
         try:
-            for i, (titulo, sql) in enumerate(consultas):
+            for c in range(3):
+                caja.grid_columnconfigure(c, weight=1, uniform="r")
+            for i, (titulo, sql, color) in enumerate(consultas):
                 cur.execute(sql)
                 valor = cur.fetchone()[0]
-                tarjeta = tk.Frame(caja, bg=BLANCO, padx=22, pady=20, highlightbackground=BORDE, highlightthickness=1)
-                tarjeta.grid(row=i // 2, column=i % 2, padx=10, pady=10, sticky="nsew")
-                tk.Label(tarjeta, text=titulo, bg=BLANCO, fg=GRIS, font=("Arial", 10)).pack()
-                tk.Label(tarjeta, text=str(valor), bg=BLANCO, fg=VERDE, font=("Arial", 24, "bold")).pack(pady=7)
-            caja.grid_columnconfigure(0, weight=1)
-            caja.grid_columnconfigure(1, weight=1)
+                tarjeta = tk.Frame(caja, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1)
+                tarjeta.grid(row=i // 3, column=i % 3, padx=10, pady=10, sticky="nsew")
+                tk.Frame(tarjeta, bg=color, height=6).pack(fill="x")
+                tk.Label(tarjeta, text=str(valor), bg=BLANCO, fg=NEGRO, font=(FUENTE, 32, "bold")).pack(pady=(16, 0))
+                tk.Label(tarjeta, text=titulo, bg=BLANCO, fg=GRIS, font=(FUENTE, 11)).pack(pady=(0, 18))
         finally:
             cur.close()
             cn.close()

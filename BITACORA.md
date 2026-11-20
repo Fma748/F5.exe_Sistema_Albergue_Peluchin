@@ -14,3 +14,8 @@
 ### TRABAJO COLABORATIVO **19/11/2026**
 - Creación de de la carpeta "Base de Datos"
 - Implementación los archivos "SQL" a la carpeta "Base de Datos
+
+### TRABAJO COLABORATIVO **20/11/2026**
+- Actualización de la base de datos: nuevas tablas Mascota, Inventario, Especie y Raza; código en todas las tablas
+- Programa pasa a Cuidados_Especiales; se elimina Entrega; Lote sin id_donacion
+- Rediseño de la interfaz gráfica con el logo del albergue y pantalla única de entradas y salidas

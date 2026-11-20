@@ -20,13 +20,15 @@ else:
     if cn:
         cur = cn.cursor()
         try:
+            cur.execute("SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(codigo,'-',-1) AS UNSIGNED)),0)+1 FROM Usuario")
+            codigo = f"USR-{int(cur.fetchone()[0]):04d}"
             cur.execute("""
                 INSERT INTO Usuario
-                (nombre_usuario, contrasena_hash, nombre_completo, rol, activo)
-                VALUES (%s, %s, %s, 'ADMIN', TRUE)
-            """, (usuario, generar_hash(clave), nombre))
+                (codigo, nombre_usuario, contrasena_hash, nombre_completo, rol, activo)
+                VALUES (%s, %s, %s, %s, 'ADMIN', TRUE)
+            """, (codigo, usuario, generar_hash(clave), nombre))
             cn.commit()
-            print("Administrador creado correctamente.")
+            print(f"Administrador creado correctamente (código {codigo}).")
         except Exception as e:
             cn.rollback()
             print("No se pudo crear el usuario:", e)
