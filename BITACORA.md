@@ -15,7 +15,14 @@
 - Creación de de la carpeta "Base de Datos"
 - Implementación los archivos "SQL" a la carpeta "Base de Datos
 
+<<<<<<< HEAD
 ### TRABAJO COLABORATIVO **20/11/2026**
 - Actualización de la base de datos: nuevas tablas Mascota, Inventario, Especie y Raza; código en todas las tablas
 - Programa pasa a Cuidados_Especiales; se elimina Entrega; Lote sin id_donacion
 - Rediseño de la interfaz gráfica con el logo del albergue y pantalla única de entradas y salidas
+=======
+### TRABAJO COLABORATIVO **19/11/2026 ** _(Segunda parte trabajada)_
+- Se actualizo el funcinamiento de todas las ventanas.
+- El archivo README fue actualizado con las indicaciones dadas por el Ing. Ruben Soria.
+- Se verifico que el sistema pueda modificar, elminar y agregar datos desde la interfaz, hacia la Base de Datos de manera simultanea.
+>>>>>>> e7718ad207c591b5ae3516edf365c95d1f51557b
