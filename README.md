@@ -1,4 +1,3 @@
-
 # GRUPO 3 
 # SISTEMA DE INVENTARIO Y SUMINISTROS 
 Lo que nuestro equipo busca crear es un sistema de inventario y suministros que apoye a tener una mejor organizacion con lo suministros y el inventario de un albergue, para implementar esta idea tras un breve estudio e investigacion, tomamos en cuenta el "Albergue Peluchin".
@@ -24,402 +23,307 @@ El sistema busca facilitar el manejo de la información mediante funcionalidades
 Asimismo, contempla el registro de los recursos destinados a los programas de asistencia, permitiendo mantener una mejor organización de la información y contribuir a una distribución más ordenada de los suministros.
 
 
-1. REQUISITOS
+## Tecnologías
+
+El sistema es una aplicación de escritorio hecha en Python que guarda su información en una base de datos MariaDB. XAMPP se usa únicamente para levantar esa base de datos en la computadora local y administrarla desde el navegador.
+
+| Tecnología | Para qué se usa en el proyecto |
+|---|---|
+| **Python** | Lógica del sistema. |
+| **Tkinter** | Ventanas, formularios y tablas de la interfaz gráfica. Viene incluido con Python. |
+| **XAMPP** | Entorno local que ejecuta Apache y MariaDB. |
+| **MariaDB** | Almacenamiento de la información. En XAMPP aparece como módulo **MySQL**. |
+| **Apache** | Servidor web que permite abrir phpMyAdmin. La aplicación en sí no lo necesita. |
+| **phpMyAdmin** | Importación y administración de la base de datos desde el navegador. |
+| **mysql-connector-python** | Conexión entre Python y MariaDB. |
+| **Visual Studio Code** | Edición y ejecución del código fuente. |
+| **Git y GitHub** | Control de versiones y alojamiento del repositorio. |
 
-Para instalar y ejecutar el proyecto se necesitan las siguientes herramientas:
+### Cómo se relacionan
 
-Herramienta
+```
+app.py (Python + Tkinter)
+        │  mysql-connector-python
+        ▼
+MariaDB  ←  módulo "MySQL" de XAMPP, puerto 3306
+        ▲
+        │  administración
+phpMyAdmin  ←  módulo "Apache" de XAMPP, http://localhost/phpmyadmin
+```
 
-Versión de referencia
+- Para **usar el sistema** basta con que el módulo **MySQL** de XAMPP esté iniciado.
+- Para **administrar la base de datos** con phpMyAdmin se necesita además el módulo **Apache**.
+- No se instala MySQL Server por separado ni se utiliza DBeaver.
 
-Función
+---
 
-Visual Studio Code
+## 1. Requisitos
 
-Versión estable
+### Versiones de referencia
 
-Editor de código
+| Herramienta | Versión | Función |
+|---|---|---|
+| Visual Studio Code | Estable | Editor de código |
+| XAMPP | 8.5.12 | Entorno de servidor local |
+| Apache | 2.4.65 | Permite acceder a phpMyAdmin |
+| MariaDB | 10.11.16 | Sistema de gestión de base de datos |
+| PHP | 8.5.12 | Incluido en XAMPP; lo utiliza phpMyAdmin |
+| phpMyAdmin | 5.2.3 | Administración de la base de datos |
+| Python | 3.14.10 | Lenguaje de programación |
+| Tkinter | Incluido con Python | Interfaz gráfica |
+| mysql-connector-python | 26.10.0 | Conexión entre Python y MariaDB |
 
-XAMPP
+> **Importante:** las versiones de Apache, MariaDB, PHP y phpMyAdmin corresponden al paquete XAMPP 8.5.12. Con otra versión de XAMPP pueden variar, y el sistema debería funcionar igual.
 
-8.5.12
+### Antes de empezar
 
-Entorno de servidor local
+- Windows 10 o Windows 11.
+- Permisos para instalar programas en el equipo.
+- La carpeta del proyecto `Albergue_Peluchin_Sistema`.
+- El archivo de base de datos `albergue_peluchin_inicial_corregida.sql`.
 
-Apache
+---
 
-2.4.65
+## 2. Instalación paso a paso (Windows + XAMPP)
 
-Permite acceder a phpMyAdmin
+Resumen del recorrido:
 
-MariaDB
+1. Instalar Visual Studio Code
+2. Instalar XAMPP
+3. Iniciar Apache y MySQL
+4. Abrir phpMyAdmin
+5. Importar la base de datos
+6. Instalar Python
+7. Abrir el proyecto
+8. Instalar las dependencias
+9. Configurar la conexión
+10. Crear el usuario administrador
+11. Ejecutar el sistema
 
-10.11.16
+Los pasos 1 al 10 se hacen una sola vez. Para el uso diario, ver [Uso diario](#3-uso-diario).
 
-Sistema de gestión de base de datos
+### Paso 1. Instalar Visual Studio Code
 
-PHP
+1. Descargar Visual Studio Code desde su página oficial: <https://code.visualstudio.com>
+2. Ejecutar el instalador y completar la instalación.
+3. Abrir Visual Studio Code.
+4. Ir a la sección **Extensiones** (`Ctrl + Shift + X`).
+5. Buscar **Python** e instalar la extensión desarrollada por **Microsoft**.
 
-8.5.12
+### Paso 2. Instalar XAMPP
 
-Componente incluido en XAMPP, utilizado por phpMyAdmin
+1. Descargar XAMPP para Windows desde <https://www.apachefriends.org>
+2. Ejecutar el instalador.
+3. En la selección de componentes, dejar marcados como mínimo **Apache**, **MySQL**, **PHP** y **phpMyAdmin**.
+4. Instalar en la ubicación por defecto:
 
-phpMyAdmin
+   ```
+   C:\xampp
+   ```
 
-5.2.3
+5. Finalizar la instalación.
 
-Administración de la base de datos
+> Conviene mantener la ruta `C:\xampp`. Instalar XAMPP dentro de `C:\Program Files` suele dar problemas de permisos.
 
-Python
+### Paso 3. Iniciar los servicios de XAMPP
 
-3.14.10
+1. Abrir **XAMPP Control Panel**.
+2. En la fila **Apache**, presionar **Start**.
+3. En la fila **MySQL**, presionar **Start**.
 
-Lenguaje de programación
+**Resultado esperado:** los nombres de ambos módulos quedan resaltados en verde y se muestran sus puertos (Apache: 80 y 443; MySQL: 3306).
 
-Tkinter
+> El módulo se llama **MySQL**, pero el motor que ejecuta es **MariaDB**. Es el comportamiento normal de XAMPP.
 
-Incluido con Python
+Si alguno no inicia, revisar [Apache o MySQL no inician](#apache-o-mysql-no-inician-en-xampp).
 
-Desarrollo de la interfaz gráfica
+### Paso 4. Abrir phpMyAdmin
 
-mysql-connector-python
+1. Abrir el navegador.
+2. Ingresar a:
 
-26.10.0
+   ```
+   http://localhost/phpmyadmin
+   ```
 
-Conexión entre Python y MariaDB
+**Resultado esperado:** se abre el panel de phpMyAdmin, con la lista de bases de datos en la columna izquierda.
 
-Importante: Las versiones de XAMPP y sus componentes corresponden al paquete de referencia XAMPP 8.5.12. Si se utiliza otra versión de XAMPP, las versiones de PHP, MariaDB y phpMyAdmin pueden variar.
+### Paso 5. Importar la base de datos
 
-Requisitos de software
+1. En phpMyAdmin, seleccionar la pestaña **Importar** del menú superior (sin entrar antes a ninguna base de datos).
+2. Presionar **Seleccionar archivo**.
+3. Buscar el archivo SQL del proyecto:
 
-Sistema operativo Windows 10 o Windows 11.
+   ```
+   albergue_peluchin_inicial_corregida.sql
+   ```
 
-Visual Studio Code instalado.
+4. Presionar **Importar** (o **Continuar**, según la versión) al final de la página.
+5. Esperar el mensaje de importación finalizada.
 
-XAMPP instalado.
+**Resultado esperado:** en la columna izquierda aparece la base de datos `Albergue_Peluchin` con sus **14 tablas**:
 
-Python instalado y agregado al PATH.
+| | | |
+|---|---|---|
+| Usuario | Categoria | Unidad_Medida |
+| Producto | Institucion | Donante |
+| Donacion | Lote | Movimiento |
+| Detalle_Movimiento | Programa | Beneficiario |
+| Programa_Beneficiario | Entrega | |
 
-Extensión Python de Microsoft en Visual Studio Code.
+> En Windows, phpMyAdmin puede mostrar los nombres en minúsculas (`albergue_peluchin`, `usuario`, etc.). Es normal y no afecta al sistema.
 
-Base de datos del proyecto.
+### Paso 6. Instalar Python
 
-Dependencia mysql-connector-python.
+1. Descargar Python para Windows desde <https://www.python.org/downloads/>
+2. Ejecutar el instalador.
+3. **Marcar la casilla "Add Python to PATH"** antes de continuar. Sin ella, los comandos de los pasos siguientes no funcionarán.
+4. Completar la instalación.
+5. Abrir una terminal de Windows o la de Visual Studio Code y comprobar la instalación:
 
-Tecnologías utilizadas
+   ```
+   py --version
+   ```
 
-Python: desarrollo de la lógica del sistema.
+   Debe mostrar la versión instalada, por ejemplo `Python 3.14.10`.
 
-Tkinter: creación de ventanas, formularios y tablas.
+6. Comprobar que Tkinter esté disponible:
 
-XAMPP: entorno local para ejecutar los servicios de Apache y MariaDB.
+   ```
+   py -m tkinter
+   ```
 
-MariaDB: almacenamiento de la información.
+   **Resultado esperado:** se abre una pequeña ventana de prueba. Cerrarla para continuar.
 
-phpMyAdmin: creación, importación y administración de la base de datos.
+### Paso 7. Abrir el proyecto en Visual Studio Code
 
-Visual Studio Code: edición y ejecución del código fuente.
+Si el proyecto está en GitHub, primero clonarlo:
 
-2. BASE DE DATOS
+```
+git clone <URL-del-repositorio>
+```
 
-Nombre de la base de datos
+Luego:
 
-Albergue_Peluchin
+1. Abrir Visual Studio Code.
+2. Seleccionar **Archivo → Abrir carpeta**.
+3. Elegir la carpeta `Albergue_Peluchin_Sistema`.
 
-Tablas del sistema
+**Resultado esperado:** en el explorador de archivos aparecen `app.py`, `conexion.py`, `seguridad.py`, `crear_admin.py`, `requirements.txt` y `LEEME.txt`.
 
-La base de datos está compuesta por 14 tablas:
+### Paso 8. Instalar las dependencias
 
-Usuario
+1. Abrir la terminal integrada: **Terminal → Nueva terminal** (`` Ctrl + ` ``).
+2. Verificar que la terminal esté ubicada en la carpeta del proyecto.
+3. Actualizar pip:
 
-Categoria
+   ```
+   py -m pip install --upgrade pip
+   ```
 
-Unidad_Medida
+4. Instalar las dependencias:
 
-Producto
+   ```
+   py -m pip install -r requirements.txt
+   ```
 
-Institucion
+El archivo `requirements.txt` contiene `mysql-connector-python`, la librería que conecta Python con MariaDB.
 
-Donante
+**Resultado esperado:** la terminal termina con un mensaje `Successfully installed ...`.
 
-Donacion
+### Paso 9. Configurar la conexión a la base de datos
 
-Lote
+1. Abrir el archivo `conexion.py`.
+2. Verificar que los datos coincidan con la configuración local de XAMPP:
 
-Movimiento
+   ```python
+   import mysql.connector
+   from mysql.connector import Error
 
-Detalle_Movimiento
+   def conectar():
+       try:
+           return mysql.connector.connect(
+               host="localhost",
+               user="root",
+               password="",
+               database="Albergue_Peluchin",
+               port=3306
+           )
+       except Error as e:
+           print("Error de conexión:", e)
+           return None
+   ```
 
-Programa
+| Parámetro | Significado | Valor en una instalación nueva de XAMPP |
+|---|---|---|
+| `host` | Dirección del servidor de base de datos | `localhost` |
+| `user` | Usuario de MariaDB | `root` |
+| `password` | Contraseña de ese usuario | vacía (`""`) |
+| `database` | Nombre de la base de datos | `Albergue_Peluchin` |
+| `port` | Puerto de conexión | `3306` |
 
-Beneficiario
+> Si al usuario `root` se le asignó una contraseña, o si MySQL se inició en otro puerto (por ejemplo 3307), esos valores deben actualizarse aquí.
 
-Programa_Beneficiario
+### Paso 10. Crear el usuario administrador
 
-Entrega
+Antes de iniciar el sistema por primera vez, con el módulo **MySQL** de XAMPP iniciado, ejecutar:
 
-Administración de la base de datos
-
-La base de datos se administra mediante phpMyAdmin, que se encuentra incluido en XAMPP.
-
-No es necesario instalar MySQL Server ni utilizar DBeaver. El servicio de base de datos se inicia directamente desde el panel de control de XAMPP, en el módulo llamado MySQL.
-
-3. INSTALACIÓN PASO A PASO – WINDOWS + XAMPP
-
-Paso 1. Instalar Visual Studio Code
-
-Descargar Visual Studio Code desde su página oficial.
-
-Ejecutar el instalador.
-
-Completar la instalación.
-
-Abrir Visual Studio Code.
-
-Ingresar a la sección de extensiones.
-
-Buscar e instalar la extensión Python, desarrollada por Microsoft.
-
-Paso 2. Instalar XAMPP
-
-Descargar XAMPP para Windows.
-
-Ejecutar el instalador.
-
-Seleccionar los componentes necesarios, incluyendo Apache, MySQL y PHP.
-
-Instalar XAMPP en la siguiente ubicación:
-
-C:\xampp
-
-Finalizar la instalación.
-
-Paso 3. Iniciar los servicios de XAMPP
-
-Abrir el XAMPP Control Panel.
-
-Buscar el módulo Apache y presionar Start.
-
-Buscar el módulo MySQL y presionar Start.
-
-Verificar que ambos servicios aparezcan activos.
-
-Nota: El módulo MySQL de XAMPP utiliza MariaDB como motor de base de datos.
-
-Paso 4. Abrir phpMyAdmin
-
-Abrir el navegador.
-
-Ingresar a la siguiente dirección:
-
-http://localhost/phpmyadmin
-
-Se abrirá phpMyAdmin.
-
-Desde esta herramienta se podrá importar y administrar la base de datos.
-
-Paso 5. Importar la base de datos
-
-Ingresar a phpMyAdmin.
-
-Seleccionar la pestaña Importar.
-
-Presionar Seleccionar archivo.
-
-Buscar el archivo SQL del proyecto:
-
-albergue_peluchin_inicial_corregida.sql
-
-Presionar Importar o Continuar.
-
-Esperar a que finalice el proceso.
-
-Verificar que aparezca la base de datos Albergue_Peluchin.
-
-Comprobar que existan las 14 tablas.
-
-Paso 6. Instalar Python
-
-Descargar Python para Windows.
-
-Ejecutar el instalador.
-
-Marcar la opción Add Python to PATH.
-
-Continuar con la instalación.
-
-Abrir una terminal de Windows o la terminal de Visual Studio Code.
-
-Comprobar que Python esté instalado:
-
-py --version
-
-Comprobar que Tkinter esté disponible:
-
-py -m tkinter
-
-Si aparece una ventana de prueba, Tkinter está funcionando correctamente.
-
-Paso 7. Abrir el proyecto en Visual Studio Code
-
-Abrir Visual Studio Code.
-
-Seleccionar Archivo → Abrir carpeta.
-
-Buscar la carpeta del proyecto.
-
-Seleccionarla y abrirla.
-
-Verificar que aparezcan los archivos del sistema.
-
-Paso 8. Instalar las dependencias
-
-Abrir la terminal integrada de Visual Studio Code.
-
-Ejecutar:
-
-py -m pip install --upgrade pip
-
-Después, instalar las dependencias:
-
-py -m pip install -r requirements.txt
-
-El archivo requirements.txt contiene la dependencia necesaria para conectar Python con MariaDB.
-
-Paso 9. Configurar la conexión a la base de datos
-
-Abrir el archivo:
-
-conexion.py
-
-Verificar que los datos de conexión correspondan a la configuración local de XAMPP.
-
-Ejemplo:
-
-import mysql.connector
-from mysql.connector import Error
-
-def conectar():
-    try:
-        return mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="",
-            database="Albergue_Peluchin",
-            port=3306
-        )
-    except Error as e:
-        print("Error de conexión:", e)
-        return None
-
-Importante:
-
-host: dirección local del servidor.
-
-user: usuario de MariaDB.
-
-password: contraseña configurada en MariaDB.
-
-database: nombre de la base de datos.
-
-port: puerto de conexión, normalmente 3306.
-
-Si el usuario root tiene contraseña, se debe colocar en el campo password.
-
-Paso 10. Crear el usuario administrador
-
-Antes de iniciar el sistema por primera vez, ejecutar:
-
+```
 py crear_admin.py
+```
 
-El programa solicitará los datos necesarios para registrar al primer administrador.
+El programa pedirá:
 
-Se debe ingresar:
+- Nombre de usuario.
+- Nombre completo.
+- Contraseña (mínimo **8 caracteres**).
 
-Nombre de usuario.
+Con estos datos se iniciará sesión en el sistema. Este paso se realiza una sola vez por instalación.
 
-Nombre completo.
+### Paso 11. Ejecutar el sistema
 
-Contraseña.
-
-La contraseña debe tener como mínimo 8 caracteres.
-
-Paso 11. Ejecutar el sistema
-
-Una vez completada la instalación y configuración, ejecutar:
-
+```
 py app.py
+```
 
-Se abrirá la interfaz gráfica del Sistema de Inventario y Suministros del Albergue de Mascotas Peluchin.
+**Resultado esperado:** se abre la ventana de inicio de sesión del Sistema de Inventario y Suministros del Albergue de Mascotas Peluchin. Ingresar con el usuario administrador creado en el paso anterior.
 
-4. FUNCIONALIDADES DEL SISTEMA
+---
 
-El sistema permite realizar las siguientes operaciones:
+## 3. Uso diario
 
-Gestión de usuarios
+Una vez instalado, para levantar el sistema solo hace falta:
 
-Inicio de sesión.
+1. Abrir **XAMPP Control Panel** e iniciar **MySQL**.
+2. Abrir la carpeta del proyecto en Visual Studio Code.
+3. Ejecutar en la terminal:
 
-Registro de usuarios.
+   ```
+   py app.py
+   ```
 
-Consulta y modificación de usuarios.
+Apache solo debe iniciarse cuando se quiera entrar a phpMyAdmin.
 
-Gestión de productos
+Al terminar, cerrar la aplicación y presionar **Stop** en los módulos activos de XAMPP.
 
-Registro de productos.
+---
 
-Consulta de productos.
+## 4. Funcionalidades del sistema
 
-Modificación de información.
+| Módulo | Operaciones |
+|---|---|
+| **Usuarios** | Inicio de sesión, registro, consulta y modificación de usuarios. |
+| **Productos** | Registro, consulta y modificación de productos; gestión de categorías y unidades de medida. |
+| **Donaciones** | Registro de donantes e instituciones; registro y consulta de donaciones. |
+| **Inventario** | Entradas mediante lotes, salidas de productos, actualización de existencias, validación de cantidades disponibles, alertas de stock mínimo y consulta de lotes próximos a vencer. |
+| **Mascotas y programas** | Registro, consulta y modificación de mascotas beneficiarias; registro de programas e inscripción de mascotas en programas. |
+| **Reportes y consultas** | Consulta general del inventario, resumen de existencias, alertas de productos y consulta de movimientos. |
 
-Gestión de categorías y unidades de medida.
+---
 
-Gestión de donaciones
+## 5. Estructura del proyecto
 
-Registro de donantes.
-
-Registro de instituciones.
-
-Registro y consulta de donaciones.
-
-Control de inventario
-
-Registro de entradas mediante lotes.
-
-Registro de salidas de productos.
-
-Actualización de existencias.
-
-Validación de cantidades disponibles.
-
-Alertas de stock mínimo.
-
-Consulta de lotes próximos a vencer.
-
-Gestión de mascotas y programas
-
-Registro de mascotas beneficiarias.
-
-Consulta y modificación de información.
-
-Registro de programas.
-
-Inscripción de mascotas en programas.
-
-Reportes y consultas
-
-Consulta general del inventario.
-
-Resumen de existencias.
-
-Alertas de productos.
-
-Consulta de movimientos.
-
-5. ESTRUCTURA DEL PROYECTO
-
-La estructura principal del proyecto es la siguiente:
-
+```
 Albergue_Peluchin_Sistema/
 │
 ├── app.py
@@ -428,89 +332,76 @@ Albergue_Peluchin_Sistema/
 ├── crear_admin.py
 ├── requirements.txt
 └── LEEME.txt
+```
 
-Descripción de los archivos
+| Archivo | Descripción |
+|---|---|
+| `app.py` | Interfaz gráfica y funcionalidades del sistema. Es el archivo que se ejecuta. |
+| `conexion.py` | Establece la conexión con MariaDB. |
+| `seguridad.py` | Protección y verificación de contraseñas. |
+| `crear_admin.py` | Crea el primer usuario administrador. |
+| `requirements.txt` | Lista de dependencias. |
+| `LEEME.txt` | Información básica del proyecto. |
 
-Archivo
+---
 
-Descripción
+## 6. Solución de problemas
 
-app.py
+### Apache o MySQL no inician en XAMPP
 
-Contiene la interfaz gráfica y las funcionalidades del sistema.
+Casi siempre se debe a que otro programa ocupa el puerto.
 
-conexion.py
+- **Apache (puertos 80 / 443):** cerrar programas que los usen (IIS, Skype, otro servidor web) y volver a presionar **Start**.
+- **MySQL (puerto 3306):** si hay un MySQL Server instalado aparte, detener ese servicio desde **Servicios** de Windows, o cambiar el puerto de XAMPP y actualizar `port` en `conexion.py`.
+- El botón **Netstat** del panel de XAMPP muestra qué programa ocupa cada puerto, y **Logs** muestra el detalle del error.
 
-Establece la conexión con MariaDB.
+### Error de conexión con la base de datos
 
-seguridad.py
+1. Verificar que XAMPP esté abierto y el módulo **MySQL** iniciado.
+2. Confirmar en phpMyAdmin que exista la base de datos `Albergue_Peluchin`.
+3. Revisar `user` y `password` en `conexion.py`.
+4. Comprobar que `port` coincida con el puerto que muestra XAMPP junto a MySQL.
 
-Gestiona la protección y verificación de contraseñas.
+### No abre phpMyAdmin
 
-crear_admin.py
+1. Verificar que **Apache** y **MySQL** estén iniciados.
+2. Ingresar a `http://localhost/phpmyadmin`.
+3. Si Apache usa otro puerto (por ejemplo 8080), ingresar a `http://localhost:8080/phpmyadmin`.
 
-Permite crear el primer usuario administrador.
+### Error al importar el archivo SQL
 
-requirements.txt
+- Si aparece **"No database selected"**: crear primero una base de datos llamada `Albergue_Peluchin` (pestaña **Bases de datos**), entrar en ella e importar el archivo desde allí.
+- Si indica que la base de datos o las tablas **ya existen**: ya fue importada antes. Para reimportar desde cero, eliminar la base de datos y repetir el Paso 5 (se pierden los datos registrados).
 
-Contiene las dependencias necesarias.
+### `py` no se reconoce como comando
 
-LEEME.txt
+Python no quedó agregado al PATH. Reinstalarlo marcando **Add Python to PATH** y abrir una terminal nueva.
 
-Contiene información básica del proyecto.
+### Error de módulo `mysql.connector`
 
-6. SOLUCIÓN DE PROBLEMAS
-
-Error de conexión con la base de datos
-
-Si aparece un error de conexión:
-
-Verificar que XAMPP esté abierto.
-
-Comprobar que el módulo MySQL esté iniciado.
-
-Revisar el nombre de la base de datos.
-
-Verificar el usuario y contraseña en conexion.py.
-
-Comprobar que el puerto sea el correcto.
-
-No abre phpMyAdmin
-
-Verificar que Apache esté iniciado.
-
-Abrir el navegador.
-
-Ingresar a http://localhost/phpmyadmin.
-
-Error de módulo mysql.connector
-
-Ejecutar en la terminal:
-
+```
 py -m pip install mysql-connector-python
+```
 
-Error al ejecutar la aplicación
+### Error al ejecutar la aplicación
 
-Comprobar que se está ubicado en la carpeta del proyecto y ejecutar:
+Comprobar que la terminal esté ubicada en la carpeta del proyecto (donde está `app.py`) y ejecutar:
 
+```
 py app.py
+```
 
-7. CONSIDERACIONES IMPORTANTES
+### No se puede iniciar sesión
 
-XAMPP debe estar iniciado antes de utilizar el sistema.
+Verificar que se haya ejecutado `py crear_admin.py` (Paso 10) y que se estén usando el usuario y la contraseña registrados allí.
 
-Apache se utiliza para acceder a phpMyAdmin.
+---
 
-MariaDB se inicia desde el módulo MySQL de XAMPP.
+## 7. Consideraciones importantes
 
-Python ejecuta la aplicación de escritorio.
-
-Tkinter permite mostrar la interfaz gráfica.
-
-phpMyAdmin permite administrar la base de datos.
-
-No se utiliza DBeaver.
-
-No se necesita instalar MySQL Server por separado.
-
-Cada instalación local utiliza su propia base de datos, salvo que se configure un servidor compartido.
+- El módulo **MySQL** de XAMPP debe estar iniciado antes de usar el sistema.
+- Apache solo se necesita para acceder a phpMyAdmin.
+- No se utiliza DBeaver ni se instala MySQL Server por separado.
+- Cada instalación local utiliza su propia base de datos, salvo que se configure un servidor compartido. Los datos registrados en una computadora no aparecen en otra.
+- La configuración por defecto de XAMPP (usuario `root` sin contraseña) está pensada para desarrollo local; no debe exponerse a internet sin protegerla.
+- Para respaldar la información, usar la pestaña **Exportar** de phpMyAdmin sobre la base de datos `Albergue_Peluchin`.
