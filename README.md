@@ -385,7 +385,7 @@ El sistema contempla los siguientes módulos y operaciones:
 
 La estructura principal del proyecto es la siguiente:
 
-```
+```text
 Albergue_Peluchin_Sistema/
 │
 ├── app.py
@@ -403,6 +403,7 @@ Albergue_Peluchin_Sistema/
     ├── logo_grande.png
     ├── logo_pequeno.png
     └── logo_mini.png
+```
 
 ## 5.1. Descripción de los archivos
 
@@ -418,7 +419,6 @@ Albergue_Peluchin_Sistema/
 | Base_de_Datos/ | Contiene el script SQL de la base de datos. |
 | imagenes/ | Contiene el logo del albergue que se muestra en la interfaz. |
 | BITACORA.md | Registro del trabajo colaborativo del equipo. |
-
 
 # 6. SOLUCIÓN DE PROBLEMAS
 
@@ -445,7 +445,6 @@ Albergue_Peluchin_Sistema/
 | `py crear_admin.py` | Crear el usuario administrador. |
 | `py app.py` | Ejecutar el sistema. |
 
-
 # 7. CONSIDERACIONES IMPORTANTES
 
 | Elemento | Consideración |
@@ -461,7 +460,6 @@ Albergue_Peluchin_Sistema/
 | MySQL Server | No es necesario instalarlo por separado. |
 | Base de datos local | Cada instalación local utiliza su propia base de datos, salvo que se configure un servidor compartido. |
 | Credenciales | No se deben publicar contraseñas reales ni datos privados en GitHub. |
-
 
 # 8. CRÉDITOS
 
