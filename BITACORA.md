@@ -14,3 +14,8 @@
 ### TRABAJO COLABORATIVO **19/11/2026**
 - Creación de de la carpeta "Base de Datos"
 - Implementación los archivos "SQL" a la carpeta "Base de Datos
+
+### TRABAJO COLABORATIVO **19/11/2026 ** _(Segunda parte trabajada)_
+- Se actualizo el funcinamiento de todas las ventanas.
+- El archivo README fue actualizado con las indicaciones dadas por el Ing. Ruben Soria.
+- Se verifico que el sistema pueda modificar, elminar y agregar datos desde la interfaz, hacia la Base de Datos de manera simultanea.
