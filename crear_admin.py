@@ -1,6 +1,7 @@
 from getpass import getpass
 from conexion import conectar
 from seguridad import generar_hash
+import validaciones as V
 
 print("=== ALBERGUE DE MASCOTAS PELUCHIN ===")
 print("CREAR USUARIO ADMINISTRADOR")
@@ -11,8 +12,12 @@ confirmar = getpass("Confirmar contraseña: ")
 
 if not usuario or not nombre or not clave:
     print("Todos los campos son obligatorios.")
-elif len(clave) < 8:
-    print("La contraseña debe tener al menos 8 caracteres.")
+elif not V.es_usuario(usuario):
+    print("El nombre de usuario debe tener de 3 a 50 caracteres: letras sin tilde, números, punto o guion bajo.")
+elif not V.es_solo_letras(nombre) or len(nombre) < V.NOMBRE_MIN or len(nombre) > 120:
+    print("El nombre completo solo puede tener letras (de 2 a 120 caracteres).")
+elif not 8 <= len(clave) <= 64:
+    print("La contraseña debe tener entre 8 y 64 caracteres.")
 elif clave != confirmar:
     print("Las contraseñas no coinciden.")
 else:

@@ -1,6 +1,7 @@
 import os
 import re
 from conexion import conectar
+from lector_sql import leer_sentencias
 
 RUTA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                     "Base_de_Datos", "albergue_peluchin_inicial_corregida.sql")
@@ -8,11 +9,7 @@ RUTA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # Tablas de la estructura anterior. Si existen, la base debe recrearse.
 TABLAS_ANTERIORES = {"entrega", "programa", "programa_beneficiario"}
 
-with open(RUTA, encoding="utf-8") as f:
-    texto = f.read()
-
-texto = re.sub(r"--[^\n]*", "", texto)          # quita comentarios
-sentencias = [s.strip() for s in texto.split(";") if s.strip()]
+sentencias = leer_sentencias(RUTA)
 
 cn = conectar()
 if cn is None:
@@ -37,6 +34,8 @@ cn.commit()
 
 cur.execute("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")
 tablas = [t[0] for t in cur.fetchall()]
+print("Nota: si la base ya existía, las reglas nuevas (CHECK) no se agregan a las tablas")
+print("      existentes. Para eso ejecuta:  py aplicar_restricciones.py")
 print("Tablas en la base:", len(tablas), "(deben ser 17)")
 for t in sorted(tablas):
     print(" -", t)

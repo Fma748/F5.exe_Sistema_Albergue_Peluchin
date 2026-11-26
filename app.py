@@ -2,11 +2,13 @@ import os
 import re
 import tkinter as tk
 from tkinter import ttk, messagebox
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from conexion import conectar
 from seguridad import autenticar, generar_hash
+import validaciones as V
+import calculo_alertas as CA
 
 CARPETA = os.path.dirname(os.path.abspath(__file__))
 FUENTE = "Segoe UI"
@@ -60,7 +62,12 @@ def titulo_columna(etiqueta):
 
 def F(campo, etiqueta, tipo="texto", req=True, **kw):
     """Define un campo del formulario.
-    tipo: texto | entero | decimal | decimal+ | fecha | fk | enum | bool | clave"""
+    tipo: texto | entero | telefono | decimal | decimal+ | fecha | fk | enum | bool | clave
+    valida (solo texto): "letras" = solo letras | "con_letra" = no puede ser solo números
+                         | "usuario" = letras, números, punto o guion bajo
+    max / min: largo máximo (el de la columna en la base) y mínimo
+    no_futura: la fecha no puede ser posterior a hoy
+    estadia: la fecha debe caer entre el ingreso y la salida de la mascota elegida"""
     d = dict(campo=campo, etiqueta=etiqueta, tipo=tipo, req=req)
     d.update(kw)
     return d
@@ -73,12 +80,12 @@ MODULOS = {
               "El stock mínimo sirve para que el sistema te avise cuando quede poco. "
               "Para sumar o restar cantidades usa «Registrar entrada o salida».",
         campos=[
-            F("nombre", "Nombre del producto"),
+            F("nombre", "Nombre del producto", valida="con_letra", max=100, min=2),
             F("id_categoria", "Categoría", "fk"),
             F("id_unidad", "Unidad de medida", "fk"),
             F("id_especie", "Especie a la que sirve", "fk", req=False, nulo="Todas"),
             F("stock_minimo", "Stock mínimo (aviso)", "decimal", default="0"),
-            F("descripcion", "Descripción", req=False),
+            F("descripcion", "Descripción", req=False, max=200),
         ],
         virtuales={"stock_minimo": "(SELECT i.stock_minimo FROM Inventario i WHERE i.id_producto=t.id_producto)"},
         extras=[("stock_actual", "Stock total",
@@ -88,36 +95,38 @@ MODULOS = {
         tabla="Categoria", pk="id_categoria", prefijo="CAT", icono="🗂",
         ayuda="Las categorías agrupan los productos (por ejemplo: Alimento, Medicina, Limpieza). "
               "Se usan al registrar productos y el consumo de las mascotas.",
-        campos=[F("nombre", "Nombre de la categoría"), F("descripcion", "Descripción", req=False)],
+        campos=[F("nombre", "Nombre de la categoría", valida="con_letra", max=100, min=2),
+                F("descripcion", "Descripción", req=False, max=200)],
     ),
     "Unidades de medida": dict(
         tabla="Unidad_Medida", pk="id_unidad", prefijo="UNI", icono="⚖",
         ayuda="Es la forma de medir un producto (kilogramo, bolsa, caja, dosis, litro...). "
               "Escribe el nombre completo y su abreviatura.",
-        campos=[F("nombre", "Nombre (ej. Kilogramo)"), F("abreviatura", "Abreviatura (ej. kg)")],
+        campos=[F("nombre", "Nombre (ej. Kilogramo)", valida="con_letra", max=50, min=2),
+                F("abreviatura", "Abreviatura (ej. kg)", valida="con_letra", max=10)],
     ),
     "Especies": dict(
         tabla="Especie", pk="id_especie", prefijo="ESP", icono="🐾",
         ayuda="Tipos de animal que atiende el albergue (Perro, Gato...). "
               "Se eligen al registrar mascotas y razas.",
-        campos=[F("nombre", "Nombre de la especie")],
+        campos=[F("nombre", "Nombre de la especie", valida="letras", max=50, min=2)],
     ),
     "Razas": dict(
         tabla="Raza", pk="id_raza", prefijo="RAZ", icono="🐕",
         ayuda="Razas de cada especie. Primero elige la especie y luego escribe el nombre de la raza.",
-        campos=[F("id_especie", "Especie", "fk"), F("nombre", "Nombre de la raza")],
+        campos=[F("id_especie", "Especie", "fk"), F("nombre", "Nombre de la raza", valida="letras", max=80, min=2)],
     ),
     "Mascotas": dict(
         tabla="Mascota", pk="id_mascota", prefijo="MAS", icono="🐶",
         ayuda="Registro de los animales del albergue. Al elegir la especie, la lista de razas se filtra sola. "
               "Cuando una mascota sale del albergue, edítala y escribe su fecha de salida.",
         campos=[
-            F("nombre", "Nombre de la mascota"),
+            F("nombre", "Nombre de la mascota", valida="letras", max=100, min=2),
             F("id_especie", "Especie", "fk"),
             F("id_raza", "Raza", "fk", req=False, depende="id_especie"),
             F("sexo", "Sexo", "enum"),
-            F("fecha_nacimiento", "Nacimiento aprox. (AAAA-MM-DD)", "fecha", req=False),
-            F("fecha_ingreso", "Fecha de ingreso (AAAA-MM-DD)", "fecha", hoy=True),
+            F("fecha_nacimiento", "Nacimiento aprox. (AAAA-MM-DD)", "fecha", req=False, no_futura=True),
+            F("fecha_ingreso", "Fecha de ingreso (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True),
             F("fecha_salida", "Fecha de salida (AAAA-MM-DD)", "fecha", req=False),
         ],
         extras=[("edad", "Edad (años)", "TIMESTAMPDIFF(YEAR, t.fecha_nacimiento, CURDATE())")],
@@ -129,7 +138,7 @@ MODULOS = {
         campos=[
             F("id_mascota", "Mascota", "fk"),
             F("id_categoria", "Categoría", "fk"),
-            F("fecha", "Fecha (AAAA-MM-DD)", "fecha", hoy=True),
+            F("fecha", "Fecha (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True, estadia=True),
             F("cantidad", "Cantidad", "decimal+"),
             F("id_unidad", "Unidad de medida", "fk"),
         ],
@@ -139,8 +148,8 @@ MODULOS = {
         ayuda="Programas de atención especial (por ejemplo: Rehabilitación, Adopción, Mascotas en tratamiento). "
               "Las fechas son opcionales.",
         campos=[
-            F("nombre", "Nombre del cuidado especial"),
-            F("objetivos", "Objetivos", req=False),
+            F("nombre", "Nombre del cuidado especial", valida="con_letra", max=120, min=2),
+            F("objetivos", "Objetivos", req=False, max=1000),
             F("fecha_inicio", "Inicio (AAAA-MM-DD)", "fecha", req=False),
             F("fecha_fin", "Fin (AAAA-MM-DD)", "fecha", req=False),
         ],
@@ -152,7 +161,7 @@ MODULOS = {
         campos=[
             F("id_cuidado", "Cuidado especial", "fk"),
             F("id_mascota", "Mascota", "fk"),
-            F("fecha_registro", "Fecha de inscripción (AAAA-MM-DD)", "fecha", hoy=True),
+            F("fecha_registro", "Fecha de inscripción (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True, estadia=True),
         ],
     ),
     "Donaciones": dict(
@@ -161,8 +170,8 @@ MODULOS = {
               "Primero registra al donante en «Donantes».",
         campos=[
             F("id_donante", "Donante", "fk"),
-            F("fecha_recepcion", "Fecha de recepción (AAAA-MM-DD)", "fecha", hoy=True),
-            F("destino", "Destino de la donación"),
+            F("fecha_recepcion", "Fecha de recepción (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True),
+            F("destino", "Destino de la donación", valida="con_letra", max=150, min=2),
         ],
     ),
     "Donantes": dict(
@@ -170,9 +179,9 @@ MODULOS = {
         ayuda="Personas o instituciones que donan al albergue. "
               "Si el donante es una INSTITUCION, elige cuál; si es una PERSONA, deja ese campo vacío.",
         campos=[
-            F("nombre", "Nombre del donante"),
+            F("nombre", "Nombre del donante", valida="con_letra", max=120, min=2),
             F("tipo_donante", "Tipo de donante", "enum"),
-            F("telefono", "Teléfono", "entero", req=False),
+            F("telefono", "Teléfono (7 u 8 dígitos)", "telefono", req=False),
             F("id_institucion", "Institución (solo si es INSTITUCION)", "fk", req=False),
         ],
     ),
@@ -180,9 +189,9 @@ MODULOS = {
         tabla="Institucion", pk="id_institucion", prefijo="INS", icono="🏢",
         ayuda="Organizaciones que colaboran con el albergue (empresas, fundaciones, colegios...).",
         campos=[
-            F("nombre", "Nombre de la institución"),
-            F("tipo", "Tipo (empresa, fundación...)", req=False),
-            F("telefono", "Teléfono", "entero", req=False),
+            F("nombre", "Nombre de la institución", valida="con_letra", max=120, min=2),
+            F("tipo", "Tipo (empresa, fundación...)", req=False, valida="con_letra", max=50, min=2),
+            F("telefono", "Teléfono (7 u 8 dígitos)", "telefono", req=False),
         ],
     ),
     "Usuarios": dict(
@@ -190,9 +199,9 @@ MODULOS = {
         ayuda="Personas que pueden usar el sistema. El ADMIN puede hacerlo todo; el OPERADOR no administra usuarios. "
               "Al editar un usuario, deja la contraseña vacía para conservar la actual.",
         campos=[
-            F("nombre_usuario", "Nombre de usuario"),
-            F("contrasena_hash", "Contraseña (mín. 8)", "clave"),
-            F("nombre_completo", "Nombre completo"),
+            F("nombre_usuario", "Nombre de usuario", valida="usuario", max=50),
+            F("contrasena_hash", "Contraseña (mín. 8)", "clave", max=64),
+            F("nombre_completo", "Nombre completo", valida="letras", max=120, min=2),
             F("rol", "Rol", "enum", default="OPERADOR"),
             F("activo", "¿Está activo?", "bool", default="Sí"),
         ],
@@ -230,25 +239,29 @@ def siguiente_codigo(cur, tabla, columna, prefijo):
 
 def texto_error(e):
     n = getattr(e, "errno", None)
+    msg = getattr(e, "msg", str(e))
     if n == 1062:
         return "Ya existe un registro con esos datos (nombre o código repetido)."
     if n == 1451:
         return "No se puede eliminar: este registro se usa en otras partes del sistema."
     if n == 1452:
         return "Uno de los datos elegidos ya no existe. Actualiza la lista e inténtalo otra vez."
+    if n == 1406:
+        return "Uno de los textos es demasiado largo. Acórtalo e inténtalo otra vez."
+    if n in (1264, 1690):
+        return "Una cantidad es demasiado grande para guardarse."
+    if n == 1292:
+        return "Una fecha no es válida. Usa el formato AAAA-MM-DD con una fecha que exista."
     if n in (3819, 4025):
+        for regla, texto in V.MENSAJES_REGLAS.items():
+            if f"`{regla}`" in msg or f"'{regla}'" in msg:
+                return texto
+        if "_rango" in msg:
+            return f"Las fechas deben estar entre {V.FECHA_MIN.year} y {V.FECHA_MAX.year}."
         return "Algún valor no cumple las reglas (cantidades o fechas incorrectas)."
     if n == 1644:
-        return getattr(e, "msg", str(e))
+        return msg
     return str(e)
-
-
-def solo_entero(texto):
-    return texto == "" or texto.isdigit()
-
-
-def solo_decimal(texto):
-    return texto == "" or re.fullmatch(r"\d*[.,]?\d*", texto) is not None
 
 
 def mezclar(c1, c2, t):
@@ -261,9 +274,9 @@ def boton(parent, texto, comando, bg=VERDE, fg=BLANCO, padx=16, pady=8, size=10)
     b = tk.Button(parent, text=texto, command=comando, bg=bg, fg=fg,
                   activebackground=mezclar(bg, NEGRO, .18), activeforeground=fg,
                   relief="flat", bd=0, cursor="hand2", padx=padx, pady=pady,
-                  font=(FUENTE, size, "bold"))
-    b.bind("<Enter>", lambda e: b.configure(bg=mezclar(bg, NEGRO, .12)))
-    b.bind("<Leave>", lambda e: b.configure(bg=bg))
+                  font=(FUENTE, size, "bold"), disabledforeground="#DDDDDD")
+    b.bind("<Enter>", lambda e: b["state"] == "normal" and b.configure(bg=mezclar(bg, NEGRO, .12)))
+    b.bind("<Leave>", lambda e: b["state"] == "normal" and b.configure(bg=bg))
     return b
 
 
@@ -358,6 +371,8 @@ class PeluchinApp:
     def limpiar(self):
         for w in self.root.winfo_children():
             w.destroy()
+        for tecla in ("<Left>", "<Right>"):      # las usa la pantalla «Cálculo de las alertas»
+            self.root.unbind(tecla)
 
     def opciones(self, sql, params=(), vacio=False):
         """Lista 'id - texto' para los desplegables."""
@@ -397,28 +412,68 @@ class PeluchinApp:
                 raise ValueError(f"{nombre}: es obligatoria (formato AAAA-MM-DD).")
             return None
         try:
-            return datetime.strptime(texto, "%Y-%m-%d").date()
+            f = datetime.strptime(texto, "%Y-%m-%d").date()
         except ValueError:
-            raise ValueError(f"{nombre}: usa el formato AAAA-MM-DD (ejemplo 2026-11-16).")
+            raise ValueError(f"{nombre}: usa el formato AAAA-MM-DD con una fecha que exista "
+                             f"(ejemplo 2026-11-16).")
+        return V.revisar_rango_fecha(f, nombre)
+
+    def revisar_estadia(self, id_mascota, fecha, nombre):
+        """La fecha debe caer mientras la mascota estuvo en el albergue."""
+        cn = self.db()
+        if cn is None:
+            return
+        cur = cn.cursor()
+        try:
+            cur.execute("SELECT fecha_ingreso, fecha_salida FROM Mascota WHERE id_mascota=%s", (id_mascota,))
+            fila = cur.fetchone()
+        finally:
+            cur.close()
+            cn.close()
+        if fila:
+            ingreso, salida = fila
+            if fecha < ingreso.isoformat():
+                raise ValueError(f"{nombre}: no puede ser anterior al ingreso de la mascota ({ingreso}).")
+            if salida and fecha > salida.isoformat():
+                raise ValueError(f"{nombre}: no puede ser posterior a la salida de la mascota ({salida}).")
 
     @staticmethod
     def leer_cantidad(texto, nombre="La cantidad", permitir_cero=False):
-        try:
-            c = Decimal((texto or "").strip().replace(",", "."))
-        except InvalidOperation:
-            raise ValueError(f"{nombre} no es un número válido.")
-        if not c.is_finite() or c < 0 or (c == 0 and not permitir_cero):
-            raise ValueError(f"{nombre} debe ser mayor que cero." if not permitir_cero
-                             else f"{nombre} no puede ser negativa.")
-        return c
+        return V.leer_cantidad(texto, nombre, permitir_cero)
 
-    def entrada(self, padre, tipo="texto", width=30, show=""):
-        kw = {}
-        if tipo == "entero":
-            kw = dict(validate="key", validatecommand=(self.root.register(solo_entero), "%P"))
+    def filtrar(self, widget, filtro):
+        """Corrige el texto del campo mientras se escribe, se pega o se carga
+        (ej. el teléfono nunca pasa de 8 dígitos). Funciona con Entry y Combobox."""
+        var = tk.StringVar(master=self.root, value=widget.get())
+        widget.configure(textvariable=var)
+
+        def corregir(*_):
+            actual = var.get()
+            bueno = filtro(actual)
+            if bueno != actual:
+                var.set(bueno)
+                widget.icursor("end")
+        var.trace_add("write", corregir)
+        widget._filtro_var = var          # que no lo borre el recolector de basura
+        return widget
+
+    def entrada(self, padre, tipo="texto", width=30, show="", valida=None, maximo=None):
+        w = ttk.Entry(padre, width=width, show=show)
+        if tipo == "telefono":
+            filtro = V.filtro_digitos(V.TELEFONO_MAX)
+        elif tipo == "entero":
+            filtro = V.filtro_digitos(maximo or 10)
         elif tipo in ("decimal", "decimal+"):
-            kw = dict(validate="key", validatecommand=(self.root.register(solo_decimal), "%P"))
-        return ttk.Entry(padre, width=width, show=show, **kw)
+            filtro = V.filtro_decimal
+        elif tipo == "fecha":
+            filtro = V.filtro_fecha
+        elif valida == "letras":
+            filtro = V.filtro_letras(maximo or 100)
+        elif valida == "usuario":
+            filtro = V.filtro_usuario(maximo or V.USUARIO_MAX)
+        else:
+            filtro = V.filtro_texto(maximo or 200)
+        return self.filtrar(w, filtro)
 
     # ------------------------------------------------------------------
     # Inicio de sesión
@@ -451,11 +506,11 @@ class PeluchinApp:
                  font=(FUENTE, 10)).pack(pady=(0, 20))
         tk.Label(tarjeta, text="👤  Usuario", bg=BLANCO, fg=TEXTO,
                  font=(FUENTE, 10, "bold")).pack(anchor="w", padx=40)
-        self.in_usuario = ttk.Entry(tarjeta, width=34)
+        self.in_usuario = self.filtrar(ttk.Entry(tarjeta, width=34), V.filtro_texto(V.USUARIO_MAX))
         self.in_usuario.pack(pady=(4, 12), padx=40, fill="x")
         tk.Label(tarjeta, text="🔒  Contraseña", bg=BLANCO, fg=TEXTO,
                  font=(FUENTE, 10, "bold")).pack(anchor="w", padx=40)
-        self.in_clave = ttk.Entry(tarjeta, width=34, show="•")
+        self.in_clave = self.filtrar(ttk.Entry(tarjeta, width=34, show="•"), V.filtro_texto(128))
         self.in_clave.pack(pady=(4, 6), padx=40, fill="x")
         self.in_clave.bind("<Return>", lambda e: self.entrar())
         self.in_usuario.bind("<Return>", lambda e: self.in_clave.focus())
@@ -627,6 +682,7 @@ class PeluchinApp:
         pie = tk.Frame(self.root, bg=FONDO)
         pie.pack(fill="x", padx=24, pady=(8, 14))
         boton(pie, "🚨  ALERTAS: STOCK BAJO Y VENCIMIENTOS", self.alertas, bg=ROJO, pady=10).pack(side="left", padx=4)
+        boton(pie, "📐  CÁLCULO DE LAS ALERTAS", self.calculo_alertas, bg="#7C4DC4", pady=10).pack(side="left", padx=4)
         boton(pie, "📊  RESUMEN GENERAL", self.resumen, bg=NEGRO, pady=10).pack(side="left", padx=4)
 
     def abrir(self, destino):
@@ -696,7 +752,8 @@ class PeluchinApp:
             elif t == "bool":
                 w = ttk.Combobox(form, state="readonly", width=30, values=ENUMS["activo"])
             else:
-                w = self.entrada(form, t, 32, show="•" if t == "clave" else "")
+                w = self.entrada(form, t, 32, show="•" if t == "clave" else "",
+                                 valida=f.get("valida"), maximo=f.get("max"))
             w.grid(row=i // 3 * 2 + 1, column=i % 3, sticky="ew", padx=6, pady=(2, 4))
             widgets[f["campo"]] = w
 
@@ -831,8 +888,8 @@ class PeluchinApp:
                     et = f["etiqueta"].split(" (")[0]
                     if t == "clave":
                         if texto:
-                            if len(texto) < 8:
-                                raise ValueError("La contraseña debe tener al menos 8 caracteres.")
+                            if not 8 <= len(texto) <= 64:
+                                raise ValueError("La contraseña debe tener entre 8 y 64 caracteres.")
                             valores[c] = generar_hash(texto)
                         elif estado["id"] is not None:
                             valores[c] = None          # conservar la contraseña actual
@@ -847,7 +904,15 @@ class PeluchinApp:
                     if t == "fk":
                         valores[c] = self.id_de(texto)
                     elif t == "fecha":
-                        valores[c] = self.leer_fecha(texto, et).isoformat()
+                        fecha = self.leer_fecha(texto, et)
+                        if f.get("no_futura") and fecha > date.today():
+                            raise ValueError(f"{et}: no puede ser una fecha futura (hoy es {date.today()}).")
+                        valores[c] = fecha.isoformat()
+                    elif t == "telefono":
+                        if not V.es_telefono(texto):
+                            raise ValueError(f"{et}: debe tener {V.TELEFONO_MIN} u {V.TELEFONO_MAX} dígitos, "
+                                             f"solo números (escribiste {len(texto)}).")
+                        valores[c] = texto
                     elif t == "entero":
                         if not texto.isdigit():
                             raise ValueError(f"{et}: escribe solo números.")
@@ -861,6 +926,19 @@ class PeluchinApp:
                     elif t == "enum" and c in ("rol", "tipo_donante"):
                         valores[c] = texto.upper()
                     else:
+                        texto = " ".join(texto.split())          # sin espacios dobles
+                        regla, minimo = f.get("valida"), f.get("min", 0)
+                        if len(texto) > f.get("max", 200):
+                            raise ValueError(f"{et}: máximo {f.get('max', 200)} caracteres.")
+                        if regla == "letras" and not V.es_solo_letras(texto):
+                            raise ValueError(f"{et}: solo puede tener letras (sin números ni símbolos).")
+                        if regla == "con_letra" and not V.tiene_letra(texto):
+                            raise ValueError(f"{et}: no puede ser solo números; escribe un texto con letras.")
+                        if regla == "usuario" and not V.es_usuario(texto):
+                            raise ValueError(f"{et}: de {V.USUARIO_MIN} a {V.USUARIO_MAX} caracteres; "
+                                             "solo letras sin tilde, números, punto o guion bajo (sin espacios).")
+                        if len(texto) < minimo:
+                            raise ValueError(f"{et}: debe tener al menos {minimo} caracteres.")
                         valores[c] = texto
 
                 # Reglas del negocio
@@ -869,8 +947,23 @@ class PeluchinApp:
                         raise ValueError("Para un donante INSTITUCION elige la institución.")
                     if valores["tipo_donante"] == "PERSONA" and valores["id_institucion"] is not None:
                         raise ValueError("Una PERSONA no lleva institución; deja ese campo vacío.")
-                if tabla == "Mascota" and valores["fecha_salida"] and valores["fecha_salida"] < valores["fecha_ingreso"]:
-                    raise ValueError("La fecha de salida no puede ser anterior a la de ingreso.")
+                if tabla == "Mascota":
+                    hoy = date.today().isoformat()
+                    nac, ing, sal = valores["fecha_nacimiento"], valores["fecha_ingreso"], valores["fecha_salida"]
+                    if nac and nac > hoy:
+                        raise ValueError(f"La fecha de nacimiento no puede ser futura (hoy es {hoy}).")
+                    if ing > hoy:
+                        raise ValueError(f"La fecha de ingreso no puede ser futura (hoy es {hoy}).")
+                    if nac and nac > ing:
+                        raise ValueError("La fecha de nacimiento no puede ser posterior a la de ingreso.")
+                    if sal and nac and sal < nac:
+                        raise ValueError("La fecha de salida no puede ser anterior a la de nacimiento.")
+                    if sal and sal < ing:
+                        raise ValueError("La fecha de salida no puede ser anterior a la de ingreso.")
+                for f in campos_def:
+                    if f.get("estadia") and valores.get(f["campo"]):
+                        self.revisar_estadia(valores["id_mascota"], valores[f["campo"]],
+                                             f["etiqueta"].split(" (")[0])
                 if tabla == "Cuidados_Especiales" and valores["fecha_inicio"] and valores["fecha_fin"] \
                         and valores["fecha_fin"] < valores["fecha_inicio"]:
                     raise ValueError("La fecha de fin no puede ser anterior a la de inicio.")
@@ -1008,20 +1101,20 @@ class PeluchinApp:
         e_cant.grid(row=0, column=3, sticky="w", pady=5)
 
         etiqueta(1, 0, "Concepto *")
-        cb_conc = ttk.Combobox(form, values=CONCEPTOS_ENTRADA)
+        cb_conc = self.filtrar(ttk.Combobox(form, values=CONCEPTOS_ENTRADA), V.filtro_texto(150))
         cb_conc.grid(row=1, column=1, sticky="ew", padx=(0, 20), pady=5)
 
         # Solo ENTRADA
         lb_venc = etiqueta(1, 2, "Vence (AAAA-MM-DD)  (opcional)")
-        e_venc = ttk.Entry(form, width=20)
+        e_venc = self.entrada(form, "fecha", 20)
         e_venc.grid(row=1, column=3, sticky="w", pady=5)
         lb_fing = etiqueta(2, 0, "Fecha de ingreso (AAAA-MM-DD) *")
-        e_fing = ttk.Entry(form, width=20)
+        e_fing = self.entrada(form, "fecha", 20)
         e_fing.grid(row=2, column=1, sticky="w", pady=5)
         e_fing.insert(0, date.today().isoformat())
         # Solo SALIDA
         lb_dest = etiqueta(1, 2, "Destinatario *  (quién recibe)")
-        e_dest = ttk.Entry(form, width=30)
+        e_dest = self.entrada(form, "texto", 30, maximo=100)
         e_dest.grid(row=1, column=3, sticky="ew", pady=5)
         lb_masc = etiqueta(2, 0, "Mascota beneficiaria  (opcional)")
         cb_masc = ttk.Combobox(form, state="readonly", values=self.opciones(
@@ -1036,7 +1129,7 @@ class PeluchinApp:
         cb_masc.bind("<<ComboboxSelected>>", al_elegir_mascota)
 
         etiqueta(2, 2, "Observación  (opcional)")
-        e_obs = ttk.Entry(form, width=30)
+        e_obs = self.entrada(form, "texto", 30, maximo=200)
         e_obs.grid(row=2, column=3, sticky="ew", pady=5)
 
         solo_entrada = [lb_venc, e_venc, lb_fing, e_fing]
@@ -1099,8 +1192,12 @@ class PeluchinApp:
                 if tipo.get() == "ENTRADA":
                     venc = self.leer_fecha(e_venc.get(), "Fecha de vencimiento", obligatoria=False)
                     f_ing = self.leer_fecha(e_fing.get(), "Fecha de ingreso")
+                    if f_ing > date.today():
+                        raise ValueError(f"La fecha de ingreso no puede ser futura (hoy es {date.today()}).")
                     if venc and venc < f_ing:
                         raise ValueError("El vencimiento no puede ser anterior a la fecha de ingreso.")
+                    if venc and venc < date.today():
+                        raise ValueError("Ese producto ya está vencido; no se puede ingresar al inventario.")
             except ValueError as e:
                 messagebox.showerror("Revisa los datos", str(e))
                 return
@@ -1131,14 +1228,24 @@ class PeluchinApp:
             try:
                 if not items:
                     raise ValueError("Agrega al menos un producto a la lista (botón «Agregar a la lista»).")
-                concepto = cb_conc.get().strip()
+                concepto = " ".join(cb_conc.get().split())
                 if not concepto:
                     raise ValueError("Escribe o elige el concepto del movimiento.")
+                if not V.tiene_letra(concepto) or len(concepto) < 2:
+                    raise ValueError("El concepto debe tener letras (no solo números).")
                 es_ent = tipo.get() == "ENTRADA"
-                dest = e_dest.get().strip()
+                dest = " ".join(e_dest.get().split())
                 if not es_ent and not dest:
                     raise ValueError("En una salida debes indicar el destinatario.")
+                if not es_ent and (not V.tiene_letra(dest) or len(dest) < 2):
+                    raise ValueError("El destinatario debe tener letras (no solo números).")
                 f_ing = self.leer_fecha(e_fing.get(), "Fecha de ingreso") if es_ent else date.today()
+                if f_ing > date.today():
+                    raise ValueError(f"La fecha de ingreso no puede ser futura (hoy es {date.today()}).")
+                if es_ent:
+                    for _pid, nom, _cant, venc in items:   # la fecha de ingreso pudo cambiar después de agregar
+                        if venc and venc < f_ing:
+                            raise ValueError(f"«{nom}» vence ({venc}) antes de la fecha de ingreso ({f_ing}).")
                 obs = e_obs.get().strip() or None
                 id_masc = self.id_de(cb_masc.get()) if not es_ent else None
                 cn = self.db()
@@ -1378,6 +1485,183 @@ class PeluchinApp:
         """, ["ALERTA", "PRODUCTO", "LOTE", "CANTIDAD", "UNIDAD", "DETALLE"], col_estado=0,
             anchos={"PRODUCTO": 220, "DETALLE": 180})
         self.leyenda("Por vencer = dentro de los próximos 30 días. El stock bajo cuenta solo los lotes vigentes.")
+        boton(self.area, "📐  VER CÓMO SE CALCULA CADA ALERTA (PASO A PASO)", self.calculo_alertas,
+              bg="#7C4DC4", pady=9).pack(pady=(0, 12))
+
+    # ------------------------------------------------------------------
+    # Cálculo de las alertas paso a paso (modelo matemático)
+    # ------------------------------------------------------------------
+    def datos_alertas(self, desde, ids=None):
+        """Lee de la base los datos del modelo. Devuelve (hoy, filas) con una fila por producto:
+        (id, nombre, unidad, I, E, D, m, X, F)."""
+        cn = self.db()
+        if cn is None:
+            return None, []
+        cur = cn.cursor()
+        try:
+            cur.execute("SELECT CURDATE()")
+            hoy = cur.fetchone()[0]
+            mov = """COALESCE((SELECT SUM(d.cantidad) FROM Detalle_Movimiento d
+                                JOIN Movimiento mv ON mv.id_movimiento = d.id_movimiento
+                                JOIN Lote lm ON lm.id_lote = d.id_lote
+                               WHERE lm.id_producto = p.id_producto AND mv.tipo_movimiento = '{}'
+                                 AND mv.fecha >= %s), 0)"""
+            filtro = ""
+            params = [desde, desde]
+            if ids:
+                filtro = "WHERE p.id_producto IN (" + ",".join(["%s"] * len(ids)) + ")"
+                params += list(ids)
+            cur.execute(f"""
+                SELECT p.id_producto, p.nombre, u.abreviatura,
+                       {mov.format('ENTRADA')} AS E,
+                       {mov.format('SALIDA')} AS D,
+                       COALESCE(i.stock_minimo, 0) AS m,
+                       COALESCE((SELECT SUM(l.cantidad_actual) FROM Lote l
+                                  WHERE l.id_producto = p.id_producto
+                                    AND l.fecha_vencimiento < CURDATE()), 0) AS X,
+                       COALESCE((SELECT SUM(l.cantidad_actual) FROM Lote l
+                                  WHERE l.id_producto = p.id_producto), 0) AS F
+                FROM Producto p
+                JOIN Unidad_Medida u ON u.id_unidad = p.id_unidad
+                LEFT JOIN Inventario i ON i.id_producto = p.id_producto
+                {filtro}
+                ORDER BY p.nombre""", tuple(params))
+            filas = []
+            for pid, nombre, uni, E, D, m, X, F in cur.fetchall():
+                E, D, m, X, F = (Decimal(str(v)) for v in (E, D, m, X, F))
+                filas.append((pid, nombre, uni, F - E + D, E, D, m, X, F))   # I = hoy − E + D
+            return hoy, filas
+        except Exception as e:
+            messagebox.showerror("Consulta", texto_error(e))
+            return None, []
+        finally:
+            cur.close()
+            cn.close()
+
+    def lotes_alertas(self, ids):
+        """Lotes con existencia y fecha de vencimiento de los productos elegidos (el que vence antes primero)."""
+        cn = self.db()
+        if cn is None:
+            return []
+        cur = cn.cursor()
+        try:
+            cur.execute("""SELECT p.nombre, l.cantidad_actual, l.fecha_vencimiento, l.codigo, u.abreviatura
+                           FROM Lote l
+                           JOIN Producto p ON p.id_producto = l.id_producto
+                           JOIN Unidad_Medida u ON u.id_unidad = p.id_unidad
+                           WHERE l.cantidad_actual > 0 AND l.fecha_vencimiento IS NOT NULL
+                             AND l.id_producto IN (""" + ",".join(["%s"] * len(ids)) + """)
+                           ORDER BY l.fecha_vencimiento, l.id_lote""", tuple(ids))
+            return [(n, Decimal(str(q)), fv, cod, u) for n, q, fv, cod, u in cur.fetchall()]
+        finally:
+            cur.close()
+            cn.close()
+
+    def calculo_alertas(self):
+        self.limpiar()
+        self.pantalla_modulo("Cálculo de las alertas", "", "📐")
+        cuerpo = tk.Frame(self.area, bg=FONDO)
+        cuerpo.pack(fill="both", expand=True, padx=14, pady=8)
+
+        izq = tk.Frame(cuerpo, bg=BLANCO, highlightbackground=BORDE, highlightthickness=1, width=410)
+        izq.pack(side="left", fill="y", padx=(0, 12))
+        izq.pack_propagate(False)
+        tk.Frame(izq, bg="#7C4DC4", height=5).pack(fill="x")
+        tk.Label(izq, text="1.  Período", bg=BLANCO, fg=NEGRO, font=(FUENTE, 11, "bold")).pack(
+            anchor="w", padx=12, pady=(8, 0))
+        fila = tk.Frame(izq, bg=BLANCO)
+        fila.pack(anchor="w", padx=12, pady=(2, 0))
+        tk.Label(fila, text="Movimientos desde:", bg=BLANCO, fg=TEXTO, font=(FUENTE, 9)).pack(side="left")
+        e_desde = self.entrada(fila, "fecha", 12)
+        e_desde.pack(side="left", padx=6)
+        e_desde.insert(0, (date.today() - timedelta(days=30)).isoformat())
+        lbl_hoy = tk.Label(izq, text="", bg=BLANCO, fg=GRIS, font=(FUENTE, 8), justify="left", wraplength=380)
+        lbl_hoy.pack(anchor="w", padx=12)
+
+        tk.Label(izq, text=f"2.  Productos (de 1 a {CA.MAX_PRODUCTOS})", bg=BLANCO, fg=NEGRO,
+                 font=(FUENTE, 11, "bold")).pack(anchor="w", padx=12, pady=(10, 0))
+        tk.Label(izq, text="Ya vienen marcados los que tienen alerta.\nCtrl + clic para elegir varios.",
+                 bg=BLANCO, fg=GRIS, font=(FUENTE, 8), justify="left").pack(anchor="w", padx=12)
+        caja = tk.Frame(izq, bg=BLANCO)
+        caja.pack(fill="both", expand=True, padx=12, pady=(4, 0))
+        tv = ttk.Treeview(caja, columns=("p", "v", "m", "e"), show="headings", selectmode="extended", height=9)
+        for col, txt, w in (("p", "PRODUCTO", 132), ("v", "VIGENTE", 82), ("m", "MÍN.", 52), ("e", "ALERTA", 84)):
+            tv.heading(col, text=txt)
+            tv.column(col, width=w, anchor="w" if col == "p" else "center", stretch=col == "p")
+        tv.tag_configure("alerta", background="#FBE3E3", foreground=ROJO)
+        tv.tag_configure("ok", background=BLANCO)
+        sb = ttk.Scrollbar(caja, orient="vertical", command=tv.yview)
+        tv.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        tv.pack(side="left", fill="both", expand=True)
+
+        pasos = CA.PasoAPaso(cuerpo, self.root, boton)
+
+        def cargar_lista():
+            hoy, filas = self.datos_alertas(date.today().isoformat())
+            if hoy is None:
+                return
+            lbl_hoy.configure(text=f"hasta hoy (t = {hoy}).\nAviso de vencimiento: k = {CA.K_DIAS} días (igual que «Alertas»).")
+            tv.delete(*tv.get_children())
+            con_alerta = []
+            for pid, nombre, uni, _I, _E, _D, m, X, F in filas:
+                vig = F - X
+                alerta = m > 0 and vig <= m
+                tv.insert("", "end", iid=str(pid), tags=("alerta" if alerta else "ok",),
+                          values=(nombre, CA.fmt(vig), CA.fmt(m), "⚠ BAJO" if alerta else ("—" if m <= 0 else "OK")))
+                if alerta:
+                    con_alerta.append(str(pid))
+            # productos con lotes por vencer o vencidos también se marcan
+            cn = self.db()
+            if cn is not None:
+                cur = cn.cursor()
+                try:
+                    cur.execute("""SELECT DISTINCT id_producto FROM Lote WHERE cantidad_actual > 0
+                                     AND fecha_vencimiento IS NOT NULL
+                                     AND fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL %s DAY)""", (CA.K_DIAS,))
+                    for (pid,) in cur.fetchall():
+                        if str(pid) not in con_alerta and tv.exists(str(pid)):
+                            con_alerta.append(str(pid))
+                            tv.item(str(pid), tags=("alerta",))
+                            vals = list(tv.item(str(pid), "values"))
+                            vals[3] = "⚠ LOTE" if vals[3] in ("OK", "—") else vals[3]
+                            tv.item(str(pid), values=vals)
+                finally:
+                    cur.close()
+                    cn.close()
+            elegidos = con_alerta[:CA.MAX_PRODUCTOS] or list(tv.get_children())[:CA.MAX_PRODUCTOS]
+            tv.selection_set(elegidos)
+            if elegidos:
+                tv.see(elegidos[0])
+
+        def resolver():
+            try:
+                desde = self.leer_fecha(e_desde.get(), "Movimientos desde")
+                if desde > date.today():
+                    raise ValueError("«Movimientos desde» no puede ser una fecha futura.")
+                ids = [int(i) for i in tv.selection()]
+                if not ids:
+                    raise ValueError("Elige al menos un producto de la lista.")
+                if len(ids) > CA.MAX_PRODUCTOS:
+                    raise ValueError(f"Elige como máximo {CA.MAX_PRODUCTOS} productos "
+                                     f"(elegiste {len(ids)}): es lo que cabe en el dibujo.")
+            except ValueError as e:
+                messagebox.showwarning("Revisa los datos", str(e))
+                return
+            hoy, filas = self.datos_alertas(desde.isoformat(), ids)
+            if hoy is None or not filas:
+                return
+            productos = [(nombre, uni, I, E, D, m, X) for _pid, nombre, uni, I, E, D, m, X, _F in filas]
+            lotes = self.lotes_alertas(ids)
+            pasos.mostrar(dict(productos=productos, lotes=lotes[:CA.MAX_LOTES], hoy=hoy, k=CA.K_DIAS,
+                               desde=desde, lotes_ocultos=max(len(lotes) - CA.MAX_LOTES, 0)))
+
+        boton(izq, "▶  RESOLVER PASO A PASO", resolver, bg=VERDE, pady=9, size=11).pack(
+            fill="x", padx=12, pady=(8, 4))
+        boton(izq, "🚨  Ver la lista de alertas", self.alertas, bg=ROJO, size=9, pady=6).pack(
+            fill="x", padx=12, pady=(0, 10))
+        cargar_lista()
+        self.pantalla = dict(desde=e_desde, lista=tv, resolver=resolver, pasos=pasos)
 
     def resumen(self):
         self.limpiar()

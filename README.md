@@ -265,7 +265,7 @@ Con el módulo MySQL de XAMPP iniciado, existen dos formas de crear la base de d
 py crear_base.py
 ```
 
-El programa pide el usuario y la contraseña de MySQL, crea la base y las 17 tablas, y ofrece aplicar las mejoras opcionales (regla de vencimiento en Lote y validación del destinatario en los movimientos).
+El programa pide el usuario y la contraseña de MySQL y crea la base con las 17 tablas, sus reglas de validación (CHECK) y los triggers.
 
 | Situación | Qué hace el script |
 |---|---|
@@ -285,7 +285,31 @@ El programa pide el usuario y la contraseña de MySQL, crea la base y las 17 tab
 | 5 | Verificar | Comprobar que se haya creado la base de datos Albergue_Peluchin. |
 | 6 | Comprobar tablas | Verificar que existan las 17 tablas del sistema. |
 
-> **Nota:** Con la opción B no se aplican las mejoras opcionales de `crear_base.py`.
+> **Nota:** La opción B también crea las reglas y los triggers (el archivo usa `DELIMITER`, que phpMyAdmin entiende).
+
+**Si la base ya existe y tiene datos: aplicar las validaciones nuevas (26/11/2026)**
+
+```
+py aplicar_restricciones.py
+```
+
+Agrega a una base existente, sin borrar datos, las reglas de validación nuevas. Antes de aplicarlas muestra los registros que no las cumplen (por ejemplo una mascota llamada "111" o con nacimiento en 2028) y permite escribir el valor correcto de cada uno. Se puede ejecutar varias veces.
+
+| Regla | Dónde se controla |
+|---|---|
+| Nombres de producto, categoría, unidad, donante, institución, cuidado especial, destino, concepto y destinatario: con letras, no solo números (mínimo 2 caracteres) | Programa y base (CHECK) |
+| Nombres de mascota, especie, raza y nombre completo del usuario: solo letras (el campo no deja escribir números) | Programa y base (CHECK) |
+| Nombre de usuario: 3 a 50 caracteres, letras, números, punto o guion bajo, sin espacios | Programa y base (CHECK) |
+| Teléfonos: solo números, 7 u 8 dígitos (el campo nunca pasa de 8, ni al pegar) | Programa y base (CHECK, VARCHAR(8)) |
+| Largo máximo de cada texto igual al de su columna | Programa (el campo no deja escribir más) y base |
+| Cantidades: mayores que 0, hasta 999999.99 y máximo 2 decimales | Programa y base |
+| Todas las fechas entre 1990 y 2099, y que existan (no 2026-02-30) | Programa y base (CHECK) |
+| No pueden ser futuras: nacimiento, ingreso de mascota y de lote, recepción de donación, consumo e inscripción | Programa y base (triggers) |
+| Mascota: nacimiento ≤ ingreso ≤ salida; la raza debe ser de su especie | Programa y base (CHECK y trigger) |
+| Consumo e inscripción: dentro de la estadía de la mascota (entre su ingreso y su salida) | Programa y base (triggers) |
+| Donante: INSTITUCION lleva institución; PERSONA no | Programa y base (CHECK) |
+| No se ingresan productos ya vencidos; el vencimiento no puede ser anterior al ingreso | Programa y base (trigger y CHECK) |
+| SALIDA lleva destinatario; ENTRADA no (antes era opcional) | Programa y base (trigger) |
 
 ## 3.9. Crear el usuario administrador
 
@@ -394,6 +418,10 @@ Albergue_Peluchin_Sistema/
 ├── crear_admin.py
 ├── crear_base.py
 ├── completar_base.py
+├── aplicar_restricciones.py
+├── validaciones.py
+├── calculo_alertas.py
+├── lector_sql.py
 ├── requirements.txt
 ├── README.md
 ├── BITACORA.md
@@ -415,6 +443,10 @@ Albergue_Peluchin_Sistema/
 | crear_admin.py | Permite crear el primer usuario administrador. |
 | crear_base.py | Crea la base de datos desde cero (borra la anterior si existe). |
 | completar_base.py | Agrega las tablas que falten sin borrar datos (solo con la estructura nueva). |
+| aplicar_restricciones.py | Agrega las validaciones nuevas (nombres, teléfonos y fechas) a una base existente sin borrar datos. |
+| calculo_alertas.py | Pantalla «Cálculo de las alertas»: resuelve paso a paso el modelo matemático (F = I + E − D, stock mínimo y vencimiento) con los datos de la base. |
+| validaciones.py | Reglas de validación compartidas por el programa y los scripts (las mismas que tiene la base). |
+| lector_sql.py | Lee el archivo .sql y lo separa en sentencias (entiende DELIMITER, necesario para los triggers). |
 | requirements.txt | Contiene las dependencias necesarias para ejecutar el proyecto. |
 | Base_de_Datos/ | Contiene el script SQL de la base de datos. |
 | imagenes/ | Contiene el logo del albergue que se muestra en la interfaz. |
