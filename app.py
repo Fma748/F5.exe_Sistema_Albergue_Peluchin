@@ -901,9 +901,10 @@ class PeluchinApp:
                         cur.execute(f"INSERT INTO `{tabla}` ({', '.join(f'`{c}`' for c in cols_ins)}) "
                                     f"VALUES ({marks})", tuple(vals))
                         if tabla == "Producto":
+                            id_nuevo = cur.lastrowid   # guardarlo ANTES de otro SELECT
                             cod_inv = siguiente_codigo(cur, "Inventario", "codigo", "INV")
                             cur.execute("INSERT INTO Inventario(codigo,id_producto,stock_actual,stock_minimo) "
-                                        "VALUES(%s,%s,0,%s)", (cod_inv, cur.lastrowid, valores["stock_minimo"]))
+                                        "VALUES(%s,%s,0,%s)", (cod_inv, id_nuevo, valores["stock_minimo"]))
                     cn.commit()
                 except Exception:
                     cn.rollback()
