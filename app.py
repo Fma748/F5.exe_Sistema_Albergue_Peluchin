@@ -3,6 +3,7 @@ import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import date, datetime, timedelta
+from tkcalendar import Calendar
 from decimal import Decimal
 
 from conexion import conectar
@@ -133,9 +134,9 @@ MODULOS = {
             F("id_especie", "Especie", "fk"),
             F("id_raza", "Raza", "fk", req=False, depende="id_especie"),
             F("sexo", "Sexo", "enum"),
-            F("fecha_nacimiento", "Nacimiento aprox. (AAAA-MM-DD)", "fecha", req=False, no_futura=True),
-            F("fecha_ingreso", "Fecha de ingreso (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True),
-            F("fecha_salida", "Fecha de salida (AAAA-MM-DD)", "fecha", req=False),
+            F("fecha_nacimiento", "Nacimiento aprox. (DD/MM/AAAA)", "fecha", req=False, no_futura=True),
+            F("fecha_ingreso", "Fecha de ingreso (DD/MM/AAAA)", "fecha", hoy=True, no_futura=True),
+            F("fecha_salida", "Fecha de salida (DD/MM/AAAA)", "fecha", req=False),
         ],
         extras=[("edad", "Edad (años)", "TIMESTAMPDIFF(YEAR, t.fecha_nacimiento, CURDATE())")],
     ),
@@ -147,7 +148,7 @@ MODULOS = {
         campos=[
             F("id_mascota", "Mascota", "fk"),
             F("id_categoria", "Categoría", "fk"),
-            F("fecha", "Fecha (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True, estadia=True),
+            F("fecha", "Fecha (DD/MM/AAAA)", "fecha", hoy=True, no_futura=True, estadia=True),
             F("cantidad", "Cantidad", "decimal+"),
             F("id_unidad", "Unidad de medida", "fk"),
         ],
@@ -160,8 +161,8 @@ MODULOS = {
         campos=[
             F("nombre", "Nombre del cuidado especial", valida="con_letra", max=120, min=2),
             F("objetivos", "Objetivos", req=False, max=1000),
-            F("fecha_inicio", "Inicio (AAAA-MM-DD)", "fecha", req=False),
-            F("fecha_fin", "Fin (AAAA-MM-DD)", "fecha", req=False),
+            F("fecha_inicio", "Inicio (DD/MM/AAAA)", "fecha", req=False),
+            F("fecha_fin", "Fin (DD/MM/AAAA)", "fecha", req=False),
         ],
     ),
     "Inscribir mascota en cuidado especial": dict(
@@ -172,7 +173,7 @@ MODULOS = {
         campos=[
             F("id_cuidado", "Cuidado especial", "fk"),
             F("id_mascota", "Mascota", "fk"),
-            F("fecha_registro", "Fecha de inscripción (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True, estadia=True),
+            F("fecha_registro", "Fecha de inscripción (DD/MM/AAAA)", "fecha", hoy=True, no_futura=True, estadia=True),
         ],
     ),
     "Donaciones": dict(
@@ -182,7 +183,7 @@ MODULOS = {
               "Primero registra al donante en «Donantes».",
         campos=[
             F("id_donante", "Donante", "fk"),
-            F("fecha_recepcion", "Fecha de recepción (AAAA-MM-DD)", "fecha", hoy=True, no_futura=True),
+            F("fecha_recepcion", "Fecha de recepción (DD/MM/AAAA)", "fecha", hoy=True, no_futura=True),
             F("destino", "Destino de la donación", valida="con_letra", max=150, min=2),
         ],
     ),
@@ -266,7 +267,7 @@ def texto_error(e):
     if n in (1264, 1690):
         return "Una cantidad es demasiado grande para guardarse."
     if n == 1292:
-        return "Una fecha no es válida. Usa el formato AAAA-MM-DD con una fecha que exista."
+        return "Una fecha no es válida. Usa el formato DD/MM/AAAA con una fecha que exista."
     if n in (3819, 4025):
         for regla, texto in V.MENSAJES_REGLAS.items():
             if f"`{regla}`" in msg or f"'{regla}'" in msg:
@@ -419,18 +420,57 @@ class PeluchinApp:
         texto = (texto or "").strip()
         return int(texto.split(" - ")[0]) if texto else None
 
+    def abrir_calendario(self, entrada):
+        """Abre un calendario emergente desde el botón con ícono 📅."""
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Seleccionar fecha")
+        ventana.transient(self.root)
+        ventana.grab_set()
+        ventana.resizable(False, False)
+        marco = tk.Frame(ventana, bg=BLANCO, padx=10, pady=10)
+        marco.pack(fill="both", expand=True)
+        try:
+            actual = datetime.strptime(entrada.get(), "%d/%m/%Y").date()
+        except ValueError:
+            actual = date.today()
+        calendario = Calendar(marco, selectmode="day", year=actual.year, month=actual.month,
+                              day=actual.day, date_pattern="dd/mm/yyyy", locale="es")
+        calendario.pack(pady=(0, 8))
+        def seleccionar():
+            entrada.delete(0, "end")
+            entrada.insert(0, calendario.get_date())
+            ventana.destroy()
+        ttk.Button(marco, text="Seleccionar", command=seleccionar).pack(fill="x")
+        ventana.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - ventana.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - ventana.winfo_height()) // 2
+        ventana.geometry(f"+{x}+{y}")
+
+    def campo_fecha(self, padre, width=20):
+        """Entry de fecha con botón de calendario; permite fechas opcionales."""
+        marco = tk.Frame(padre, bg=BLANCO)
+        entrada = self.entrada(marco, "fecha", width)
+        entrada.pack(side="left", fill="x", expand=True)
+        boton = ttk.Button(marco, text="📅", width=3,
+                           command=lambda e=entrada: self.abrir_calendario(e))
+        boton.pack(side="left", padx=(4, 0))
+        return marco, entrada
+
     @staticmethod
     def leer_fecha(texto, nombre, obligatoria=True):
         texto = (texto or "").strip()
         if not texto:
             if obligatoria:
-                raise ValueError(f"{nombre}: es obligatoria (formato AAAA-MM-DD).")
+                raise ValueError(f"{nombre}: es obligatoria (formato DD/MM/AAAA).")
             return None
         try:
-            f = datetime.strptime(texto, "%Y-%m-%d").date()
+            try:
+                f = datetime.strptime(texto, "%d/%m/%Y").date()
+            except ValueError:
+                # Compatibilidad con valores antiguos que ya estén en formato MySQL.
+                f = datetime.strptime(texto, "%Y-%m-%d").date()
         except ValueError:
-            raise ValueError(f"{nombre}: usa el formato AAAA-MM-DD con una fecha que exista "
-                             f"(ejemplo 2026-11-16).")
+            raise ValueError(f"{nombre}: usa DD/MM/AAAA (ejemplo 27/11/2026).")
         return V.revisar_rango_fecha(f, nombre)
 
     def revisar_estadia(self, id_mascota, fecha, nombre):
@@ -481,7 +521,7 @@ class PeluchinApp:
         elif tipo in ("decimal", "decimal+"):
             filtro = V.filtro_decimal
         elif tipo == "fecha":
-            filtro = V.filtro_fecha
+            filtro = V.filtro_texto(10)
         elif valida == "letras":
             filtro = V.filtro_letras(maximo or 100)
         elif valida == "usuario":
@@ -762,6 +802,8 @@ class PeluchinApp:
             if t == "fk":
                 w = ttk.Combobox(form, state="readonly", width=30,
                                  values=[] if f.get("depende") else self.opciones_fk(f["campo"], vacio=not f["req"]))
+            elif t == "fecha":
+                marco_fecha, w = self.campo_fecha(form, 25)
             elif t == "enum":
                 w = ttk.Combobox(form, state="readonly", width=30, values=ENUMS[f["campo"]])
             elif t == "bool":
@@ -769,7 +811,11 @@ class PeluchinApp:
             else:
                 w = self.entrada(form, t, 32, show="•" if t == "clave" else "",
                                  valida=f.get("valida"), maximo=f.get("max"))
-            w.grid(row=i // 3 * 2 + 1, column=i % 3, sticky="ew", padx=6, pady=(2, 4))
+            if t == "fecha":
+                marco_fecha.grid(row=i // 3 * 2 + 1, column=i % 3, sticky="ew", padx=6, pady=(2, 4))
+                marco_fecha.grid_columnconfigure(0, weight=1)
+            else:
+                w.grid(row=i // 3 * 2 + 1, column=i % 3, sticky="ew", padx=6, pady=(2, 4))
             widgets[f["campo"]] = w
 
         # La raza depende de la especie elegida
@@ -836,7 +882,7 @@ class PeluchinApp:
             estado["id"] = None
             lbl_modo.configure(text="🆕  Nuevo registro  —  llena los datos y presiona «Guardar»")
             for f in campos_def:
-                defecto = f.get("default", date.today().isoformat() if f.get("hoy") else "")
+                defecto = f.get("default", date.today().strftime("%d/%m/%Y") if f.get("hoy") else "")
                 poner(f["campo"], defecto)
                 if f.get("depende"):
                     widgets[f["campo"]]["values"] = []
@@ -877,7 +923,9 @@ class PeluchinApp:
             cur = cn.cursor()
             try:
                 cur.execute(f"SELECT {', '.join(sel)} FROM `{tabla}` t ORDER BY t.`{pk}` DESC")
-                estado["filas"] = [["" if v is None else v for v in fila] for fila in cur.fetchall()]
+                estado["filas"] = [[("" if v is None else v.strftime("%d/%m/%Y")
+                                   if isinstance(v, (date, datetime)) else v) for v in fila]
+                                  for fila in cur.fetchall()]
             except Exception as e:
                 messagebox.showerror("Consulta", texto_error(e))
             finally:
@@ -1139,13 +1187,13 @@ class PeluchinApp:
         cb_conc.grid(row=1, column=1, sticky="ew", padx=(0, 20), pady=5)
 
         # Solo ENTRADA
-        lb_venc = etiqueta(1, 2, "Vence (AAAA-MM-DD)  (opcional)")
-        e_venc = self.entrada(form, "fecha", 20)
-        e_venc.grid(row=1, column=3, sticky="w", pady=5)
-        lb_fing = etiqueta(2, 0, "Fecha de ingreso (AAAA-MM-DD) *")
-        e_fing = self.entrada(form, "fecha", 20)
-        e_fing.grid(row=2, column=1, sticky="w", pady=5)
-        e_fing.insert(0, date.today().isoformat())
+        lb_venc = etiqueta(1, 2, "Vence (DD/MM/AAAA)  (opcional)")
+        marco_venc, e_venc = self.campo_fecha(form, 17)
+        marco_venc.grid(row=1, column=3, sticky="w", pady=5)
+        lb_fing = etiqueta(2, 0, "Fecha de ingreso (DD/MM/AAAA) *")
+        marco_fing, e_fing = self.campo_fecha(form, 15)
+        marco_fing.grid(row=2, column=1, sticky="w", pady=5)
+        e_fing.insert(0, date.today().strftime("%d/%m/%Y"))
         # Solo SALIDA
         lb_dest = etiqueta(1, 2, "Destinatario *  (quién recibe)")
         e_dest = self.entrada(form, "texto", 30, maximo=100)
@@ -1189,7 +1237,7 @@ class PeluchinApp:
                 tv.delete(i)
             for n, (pid, nom, cant, venc) in enumerate(items):
                 tv.insert("", "end", iid=str(n), tags=("par" if n % 2 == 0 else "impar",),
-                          values=(nom, cant, venc.isoformat() if venc else "—"))
+                          values=(nom, cant, venc.strftime("%d/%m/%Y") if venc else "—"))
 
         def recargar_productos():
             cb_prod["values"] = self.opciones(SQL_PRODUCTOS)
@@ -1606,9 +1654,9 @@ class PeluchinApp:
         fila = tk.Frame(izq, bg=BLANCO)
         fila.pack(anchor="w", padx=12, pady=(2, 0))
         tk.Label(fila, text="Movimientos desde:", bg=BLANCO, fg=TEXTO, font=(FUENTE, 9)).pack(side="left")
-        e_desde = self.entrada(fila, "fecha", 12)
-        e_desde.pack(side="left", padx=6)
-        e_desde.insert(0, (date.today() - timedelta(days=30)).isoformat())
+        marco_desde, e_desde = self.campo_fecha(fila, 13)
+        marco_desde.pack(side="left", padx=6)
+        e_desde.insert(0, (date.today() - timedelta(days=30)).strftime("%d/%m/%Y"))
         lbl_hoy = tk.Label(izq, text="", bg=BLANCO, fg=GRIS, font=(FUENTE, 8), justify="left", wraplength=380)
         lbl_hoy.pack(anchor="w", padx=12)
 
