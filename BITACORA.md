@@ -77,7 +77,7 @@
 - Triggers trg_mascota_fechas_ins / trg_mascota_fechas_upd para impedir fechas futuras
 - Nuevo script aplicar_restricciones.py para actualizar bases existentes sin perder datos
 
-### **Revisión completa de validaciones (26/11/2026, segunda parte)**
+### **Revisión completa de validaciones**
 - Teléfono: el límite de 8 dígitos ahora se aplica sobre el contenido del campo (al escribir, pegar o cargar un registro), no solo sobre la tecla presionada
 - Todos los campos de texto tienen el largo máximo de su columna en la base
 - Cantidades: hasta 999999.99 y máximo 2 decimales
@@ -90,15 +90,24 @@
 - Las reglas de vencimiento del lote y del destinatario pasan a ser obligatorias (ya no opcionales)
 - Nuevo módulo validaciones.py con las reglas compartidas
 
-### **Pantalla «Cálculo de las alertas» (26/11/2026)**
+### **Pantalla «Cálculo de las alertas**
 - Se integró el modelo matemático (Subproducto P2) al sistema, junto al botón de Alertas
 - Usa los datos reales de la base: E y D del período elegido, m del inventario, I = existencia de hoy − E + D
 - Resuelve paso a paso: balance F = I + E − D, restricción F ≥ 0, alerta de stock mínimo y alerta de vencimiento
 - Sus resultados coinciden con la pantalla «Alertas» (stock vigente, m > 0, k = 30 días)
 - Acceso desde el inicio y desde la pantalla de Alertas
 
-### **Buscador (26/11/2026)**
+### **Buscador**
 - Debajo de la caja de búsqueda se indica por qué atributos busca cada pantalla (ej. «Busca por: código o nombre del producto»)
 - La búsqueda solo mira esos atributos (antes miraba todas las columnas: «10» traía productos con stock 10)
 - Muestra cuántos resultados hay, o «Sin resultados» en rojo
 - Usuarios: las columnas se llaman «Usuario» y «Nombre completo» (antes ambas decían «Nombre»)
+
+---
+
+## **TRABAJO COLABORATIVO — 27/11/2026** 
+
+### **Corrección Base de Datos y Diagrama E-R**
+- Se elimino la tabla V_Mascotas
+- Se modifico la en base al diagrama E-R  
+
