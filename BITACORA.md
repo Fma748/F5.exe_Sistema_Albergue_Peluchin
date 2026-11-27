@@ -96,3 +96,9 @@
 - Resuelve paso a paso: balance F = I + E − D, restricción F ≥ 0, alerta de stock mínimo y alerta de vencimiento
 - Sus resultados coinciden con la pantalla «Alertas» (stock vigente, m > 0, k = 30 días)
 - Acceso desde el inicio y desde la pantalla de Alertas
+
+### **Buscador (26/11/2026)**
+- Debajo de la caja de búsqueda se indica por qué atributos busca cada pantalla (ej. «Busca por: código o nombre del producto»)
+- La búsqueda solo mira esos atributos (antes miraba todas las columnas: «10» traía productos con stock 10)
+- Muestra cuántos resultados hay, o «Sin resultados» en rojo
+- Usuarios: las columnas se llaman «Usuario» y «Nombre completo» (antes ambas decían «Nombre»)

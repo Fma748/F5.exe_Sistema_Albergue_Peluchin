@@ -55,6 +55,8 @@ ENUMS = {
 
 def titulo_columna(etiqueta):
     t = etiqueta.split(" (")[0]
+    if t in ("Nombre de usuario", "Nombre completo"):
+        return {"Nombre de usuario": "Usuario"}.get(t, t)
     if t.startswith("Nombre"):
         return "Nombre"
     return {"Especie a la que sirve": "Especie", "Institución": "Institución"}.get(t, t)
@@ -76,6 +78,7 @@ def F(campo, etiqueta, tipo="texto", req=True, **kw):
 MODULOS = {
     "Productos": dict(
         tabla="Producto", pk="id_producto", prefijo="PRD", icono="📦",
+        buscar=["codigo", "nombre"],
         ayuda="Aquí registras los productos del albergue (alimentos, medicinas, insumos de limpieza...). "
               "El stock mínimo sirve para que el sistema te avise cuando quede poco. "
               "Para sumar o restar cantidades usa «Registrar entrada o salida».",
@@ -93,6 +96,7 @@ MODULOS = {
     ),
     "Categorías de productos": dict(
         tabla="Categoria", pk="id_categoria", prefijo="CAT", icono="🗂",
+        buscar=["codigo", "nombre"],
         ayuda="Las categorías agrupan los productos (por ejemplo: Alimento, Medicina, Limpieza). "
               "Se usan al registrar productos y el consumo de las mascotas.",
         campos=[F("nombre", "Nombre de la categoría", valida="con_letra", max=100, min=2),
@@ -100,6 +104,7 @@ MODULOS = {
     ),
     "Unidades de medida": dict(
         tabla="Unidad_Medida", pk="id_unidad", prefijo="UNI", icono="⚖",
+        buscar=["codigo", "nombre", "abreviatura"],
         ayuda="Es la forma de medir un producto (kilogramo, bolsa, caja, dosis, litro...). "
               "Escribe el nombre completo y su abreviatura.",
         campos=[F("nombre", "Nombre (ej. Kilogramo)", valida="con_letra", max=50, min=2),
@@ -107,17 +112,20 @@ MODULOS = {
     ),
     "Especies": dict(
         tabla="Especie", pk="id_especie", prefijo="ESP", icono="🐾",
+        buscar=["codigo", "nombre"],
         ayuda="Tipos de animal que atiende el albergue (Perro, Gato...). "
               "Se eligen al registrar mascotas y razas.",
         campos=[F("nombre", "Nombre de la especie", valida="letras", max=50, min=2)],
     ),
     "Razas": dict(
         tabla="Raza", pk="id_raza", prefijo="RAZ", icono="🐕",
+        buscar=["codigo", "nombre"],
         ayuda="Razas de cada especie. Primero elige la especie y luego escribe el nombre de la raza.",
         campos=[F("id_especie", "Especie", "fk"), F("nombre", "Nombre de la raza", valida="letras", max=80, min=2)],
     ),
     "Mascotas": dict(
         tabla="Mascota", pk="id_mascota", prefijo="MAS", icono="🐶",
+        buscar=["codigo", "nombre"],
         ayuda="Registro de los animales del albergue. Al elegir la especie, la lista de razas se filtra sola. "
               "Cuando una mascota sale del albergue, edítala y escribe su fecha de salida.",
         campos=[
@@ -133,6 +141,7 @@ MODULOS = {
     ),
     "Consumo por mascota": dict(
         tabla="Beneficiario", pk="cod_beneficiario", col_codigo="cod_beneficiario", prefijo="BEN", icono="🍽",
+        buscar=["codigo", "id_mascota"],
         ayuda="Aquí queda anotado qué recibe cada mascota (por ejemplo: 2 kg de alimento). "
               "Estos registros también se crean solos cuando haces una salida de inventario para una mascota.",
         campos=[
@@ -145,6 +154,7 @@ MODULOS = {
     ),
     "Cuidados especiales": dict(
         tabla="Cuidados_Especiales", pk="id_cuidado", prefijo="CUI", icono="❤",
+        buscar=["codigo", "nombre"],
         ayuda="Programas de atención especial (por ejemplo: Rehabilitación, Adopción, Mascotas en tratamiento). "
               "Las fechas son opcionales.",
         campos=[
@@ -156,6 +166,7 @@ MODULOS = {
     ),
     "Inscribir mascota en cuidado especial": dict(
         tabla="Mascota_Cuidado", pk="id_mascota_cuidado", prefijo="MCU", icono="📝",
+        buscar=["codigo", "id_mascota", "id_cuidado"],
         ayuda="Aquí inscribes una mascota en uno de los cuidados especiales. "
               "Una mascota no puede inscribirse dos veces en el mismo cuidado.",
         campos=[
@@ -166,6 +177,7 @@ MODULOS = {
     ),
     "Donaciones": dict(
         tabla="Donacion", pk="id_donacion", prefijo="DON", icono="🎁",
+        buscar=["codigo", "id_donante"],
         ayuda="Registro de las donaciones recibidas: quién donó, cuándo y para qué se destina. "
               "Primero registra al donante en «Donantes».",
         campos=[
@@ -176,6 +188,7 @@ MODULOS = {
     ),
     "Donantes": dict(
         tabla="Donante", pk="id_donante", prefijo="DNT", icono="🤝",
+        buscar=["codigo", "nombre"],
         ayuda="Personas o instituciones que donan al albergue. "
               "Si el donante es una INSTITUCION, elige cuál; si es una PERSONA, deja ese campo vacío.",
         campos=[
@@ -187,6 +200,7 @@ MODULOS = {
     ),
     "Instituciones": dict(
         tabla="Institucion", pk="id_institucion", prefijo="INS", icono="🏢",
+        buscar=["codigo", "nombre"],
         ayuda="Organizaciones que colaboran con el albergue (empresas, fundaciones, colegios...).",
         campos=[
             F("nombre", "Nombre de la institución", valida="con_letra", max=120, min=2),
@@ -196,6 +210,7 @@ MODULOS = {
     ),
     "Usuarios": dict(
         tabla="Usuario", pk="id_usuario", prefijo="USR", icono="👤",
+        buscar=["codigo", "nombre_usuario", "nombre_completo"],
         ayuda="Personas que pueden usar el sistema. El ADMIN puede hacerlo todo; el OPERADOR no administra usuarios. "
               "Al editar un usuario, deja la contraseña vacía para conservar la actual.",
         campos=[
@@ -827,16 +842,31 @@ class PeluchinApp:
                     widgets[f["campo"]]["values"] = []
             tv.selection_remove(tv.selection())
 
+        # El buscador solo mira estos atributos (y el mensaje junto a la caja lo dice)
+        campos_busqueda = m.get("buscar", ["codigo", "nombre"])
+        cols_busqueda = [cols.index(c) for c in campos_busqueda]
+        nombres_busqueda = ["código" if c == "codigo" else
+                            next(f["etiqueta"] for f in campos_def if f["campo"] == c).split(" (")[0].lower()
+                            for c in campos_busqueda]
+        texto_busqueda = "Busca por: " + (", ".join(nombres_busqueda[:-1]) + " o " + nombres_busqueda[-1]
+                                          if len(nombres_busqueda) > 1 else nombres_busqueda[0])
+
         def mostrar(*_):
             for i in tv.get_children():
                 tv.delete(i)
             filtro = buscar.get().strip().lower()
             n = 0
             for fila in estado["filas"]:
-                if filtro and not any(filtro in str(v).lower() for v in fila[1:len(visibles) + 1]):
+                if filtro and not any(filtro in str(fila[i]).lower() for i in cols_busqueda):
                     continue
                 tv.insert("", "end", values=fila, tags=("par" if n % 2 == 0 else "impar",))
                 n += 1
+            if filtro:
+                lbl_busqueda.configure(text=f"{texto_busqueda}   ·   {n} resultado(s)" if n else
+                                       f"{texto_busqueda}   ·   Sin resultados para «{buscar.get().strip()}»",
+                                       fg=GRIS if n else ROJO)
+            else:
+                lbl_busqueda.configure(text=texto_busqueda, fg=GRIS)
 
         def cargar():
             sel = [f"t.`{pk}`", f"t.`{col_cod}`"] + [expr_campo(f) for f in campos_def] \
@@ -1046,8 +1076,12 @@ class PeluchinApp:
         boton(barra, "🆕  NUEVO / LIMPIAR", limpiar_form, bg=AZUL).pack(side="left", padx=6)
         boton(barra, "🗑  ELIMINAR", eliminar, bg=ROJO).pack(side="left", padx=6)
         boton(barra, "🔄  ACTUALIZAR LISTA", cargar, bg=GRIS).pack(side="left", padx=6)
-        tk.Label(barra, text="🔎 Buscar:", bg=FONDO, fg=TEXTO, font=(FUENTE, 10, "bold")).pack(side="left", padx=(30, 4))
-        ttk.Entry(barra, textvariable=buscar, width=26).pack(side="left")
+        zona = tk.Frame(barra, bg=FONDO)
+        zona.pack(side="left", padx=(30, 0))
+        tk.Label(zona, text="🔎 Buscar:", bg=FONDO, fg=TEXTO, font=(FUENTE, 10, "bold")).grid(row=0, column=0, padx=(0, 4))
+        ttk.Entry(zona, textvariable=buscar, width=30).grid(row=0, column=1, sticky="w")
+        lbl_busqueda = tk.Label(zona, text=texto_busqueda, bg=FONDO, fg=GRIS, font=(FUENTE, 8, "italic"))
+        lbl_busqueda.grid(row=1, column=1, sticky="w")
         buscar.trace_add("write", mostrar)
 
         caja.pack(fill="both", expand=True, padx=20, pady=(4, 12))
