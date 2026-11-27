@@ -109,5 +109,7 @@
 
 ### **Corrección Base de Datos y Diagrama E-R**
 - Se elimino la tabla V_Mascotas
-- Se modifico la en base al diagrama E-R  
+- Se modifico la en base al diagrama E-R
+- Cambio de formato de fecha AAAA/MM/DD a DD/MM/AAA
+- Creación de botón calendario   
 
